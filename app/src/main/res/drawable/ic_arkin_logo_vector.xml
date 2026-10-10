@@ -1,0 +1,39 @@
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="100dp"
+    android:height="100dp"
+    android:viewportWidth="100"
+    android:viewportHeight="100">
+    <!-- Squircle background -->
+    <path
+        android:fillColor="#FFFFFF"
+        android:pathData="M20,6 C10,6 6,10 6,20 L6,80 C6,90 10,94 20,94 L80,94 C90,94 94,90 94,80 L94,20 C94,10 90,6 80,6 Z" />
+    
+    <!-- Left spine outline and tabs (Blue to Purple) -->
+    <path
+        android:fillColor="#4F46E5"
+        android:pathData="M32,20 C24,20 20,24 20,32 L20,70 C20,76 23,80 28,81 L32,77 C30,76 28,73 28,68 L28,32 C28,28 30,26 34,26 L52,26 C54,26 55,24 53,22 C48,20 40,20 32,20 Z" />
+    
+    <!-- Spine Ring Tabs -->
+    <path
+        android:fillColor="#4F46E5"
+        android:pathData="M16,36 C16,34 18,33 22,33 L28,33 L28,39 L22,39 C18,39 16,38 16,36 Z" />
+    <path
+        android:fillColor="#4F46E5"
+        android:pathData="M16,50 C16,48 18,47 22,47 L28,47 L28,53 L22,53 C18,53 16,52 16,50 Z" />
+    <path
+        android:fillColor="#4F46E5"
+        android:pathData="M16,64 C16,62 18,61 22,61 L28,61 L28,67 L22,67 C18,67 16,66 16,64 Z" />
+
+    <!-- Stylized 'A' Body (Navy to Deep Indigo) -->
+    <path
+        android:fillColor="#1E1B4B"
+        android:pathData="M52,24 C50,24 48,25 47,27 L32,68 C31,71 33,74 36,74 L42,74 C44,74 46,73 47,71 L51,60 L62,60 L63,64 C64,66 65,68 67,70 L72,74 L78,65 L57,27 C56,25 54,24 52,24 Z M54,39 L60,53 L47,53 Z" />
+
+    <!-- Pencil Nib Tip at bottom right -->
+    <path
+        android:fillColor="#7C3AED"
+        android:pathData="M69,69 L74,74 C75,75 75,77 73,79 L71,81 C70,82 68,82 67,80 L64,74 Z" />
+    <path
+        android:fillColor="#4F46E5"
+        android:pathData="M73,79 L76,83 C77,84 76,85 75,85 L73,85 C72,85 71,84 71,83 L71,81 Z" />
+</vector>

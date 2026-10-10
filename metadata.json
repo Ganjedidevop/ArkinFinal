@@ -1,0 +1,6 @@
+{
+  "name": "Arkin",
+  "description": "All-in-one AI notes and student productivity app with smart assistant, timetable, to-do list, homework tracker, private locker, and analytics.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
