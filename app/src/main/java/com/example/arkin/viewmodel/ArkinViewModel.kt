@@ -1,12 +1,15 @@
 package com.example.arkin.viewmodel
 
 import android.app.Application
+import android.content.Context
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.example.arkin.data.ArkinDatabase
 import com.example.arkin.data.ai.GeminiHelper
 import com.example.arkin.data.backup.BackupManager
 import com.example.arkin.data.backup.BackupPreview
+import com.example.arkin.data.firebase.FirebaseAuthHelper
+import com.example.arkin.data.firebase.FirestoreManager
 import com.example.arkin.data.model.ExamResultEntity
 import com.example.arkin.data.model.HomeworkEntity
 import com.example.arkin.data.model.NoteEntity
@@ -20,6 +23,7 @@ import com.example.arkin.model.BottomNavTab
 import com.example.arkin.model.ChatMessage
 import com.example.arkin.model.DocUploadType
 import com.example.arkin.model.ParsedTimetableClass
+import com.google.firebase.auth.FirebaseUser
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
@@ -176,11 +180,31 @@ class ArkinViewModel(application: Application) : AndroidViewModel(application) {
     val backupPreview = MutableStateFlow<BackupPreview?>(null)
     val isRestoringBackup = MutableStateFlow(false)
 
+    // Firebase Authentication & Cloud State
+    val firebaseUser: StateFlow<FirebaseUser?> = FirebaseAuthHelper.authStateFlow
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), FirebaseAuthHelper.currentUser)
+    val isAuthLoading = MutableStateFlow(false)
+    val authError = MutableStateFlow<String?>(null)
+    val isFirestoreSyncing = MutableStateFlow(false)
+    val lastFirestoreSyncTime = MutableStateFlow<Long?>(null)
+
     init {
         viewModelScope.launch {
-            val prof = studentProfile.value
+            val prof = profileDao.getProfileSync()
             if (prof == null) {
                 ArkinDatabase.populateInitialData(db)
+            }
+            // If user is already authenticated with Firebase, pull latest cloud data
+            if (FirebaseAuthHelper.isUserLoggedIn) {
+                val user = FirebaseAuthHelper.currentUser
+                if (user != null) {
+                    val remoteProfile = FirestoreManager.fetchProfile(user.uid)
+                    if (remoteProfile != null) {
+                        profileDao.updateProfile(remoteProfile)
+                    }
+                    FirestoreManager.syncFirestoreToLocal(db, merge = true)
+                    lastFirestoreSyncTime.value = System.currentTimeMillis()
+                }
             }
         }
     }
@@ -267,31 +291,35 @@ class ArkinViewModel(application: Application) : AndroidViewModel(application) {
         viewModelScope.launch {
             val existing = editingNote.value
             if (existing != null) {
-                noteDao.updateNote(
-                    existing.copy(
-                        title = title,
-                        content = content,
-                        tag = tag,
-                        colorKey = colorKey,
-                        subject = subject,
-                        category = category,
-                        timestamp = System.currentTimeMillis()
-                    )
+                val updated = existing.copy(
+                    title = title,
+                    content = content,
+                    tag = tag,
+                    colorKey = colorKey,
+                    subject = subject,
+                    category = category,
+                    timestamp = System.currentTimeMillis()
                 )
+                noteDao.updateNote(updated)
+                if (studentProfile.value?.cloudSyncEnabled == true && FirebaseAuthHelper.isUserLoggedIn) {
+                    FirestoreManager.saveNote(updated)
+                }
                 showToast("Note updated successfully")
             } else {
-                noteDao.insertNote(
-                    NoteEntity(
-                        title = title,
-                        content = content,
-                        tag = tag,
-                        colorKey = colorKey,
-                        subject = subject,
-                        category = category,
-                        timestamp = System.currentTimeMillis(),
-                        isSecure = isSecure
-                    )
+                val newNote = NoteEntity(
+                    title = title,
+                    content = content,
+                    tag = tag,
+                    colorKey = colorKey,
+                    subject = subject,
+                    category = category,
+                    timestamp = System.currentTimeMillis(),
+                    isSecure = isSecure
                 )
+                val id = noteDao.insertNote(newNote)
+                if (studentProfile.value?.cloudSyncEnabled == true && FirebaseAuthHelper.isUserLoggedIn) {
+                    FirestoreManager.saveNote(newNote.copy(id = id))
+                }
                 showToast(if (isSecure) "Saved to Secure Locker" else "Note created")
             }
             closeNoteDialog()
@@ -300,13 +328,21 @@ class ArkinViewModel(application: Application) : AndroidViewModel(application) {
 
     fun toggleFavoriteNote(note: NoteEntity) {
         viewModelScope.launch {
-            noteDao.updateNote(note.copy(isFavorite = !note.isFavorite))
+            val updated = note.copy(isFavorite = !note.isFavorite)
+            noteDao.updateNote(updated)
+            if (studentProfile.value?.cloudSyncEnabled == true && FirebaseAuthHelper.isUserLoggedIn) {
+                FirestoreManager.saveNote(updated)
+            }
         }
     }
 
     fun toggleArchiveNote(note: NoteEntity) {
         viewModelScope.launch {
-            noteDao.updateNote(note.copy(isArchived = !note.isArchived))
+            val updated = note.copy(isArchived = !note.isArchived)
+            noteDao.updateNote(updated)
+            if (studentProfile.value?.cloudSyncEnabled == true && FirebaseAuthHelper.isUserLoggedIn) {
+                FirestoreManager.saveNote(updated)
+            }
             showToast(if (!note.isArchived) "Note archived" else "Note unarchived")
         }
     }
@@ -314,6 +350,9 @@ class ArkinViewModel(application: Application) : AndroidViewModel(application) {
     fun deleteNote(note: NoteEntity) {
         viewModelScope.launch {
             noteDao.deleteNote(note)
+            if (studentProfile.value?.cloudSyncEnabled == true && FirebaseAuthHelper.isUserLoggedIn) {
+                FirestoreManager.deleteNote(note.id)
+            }
             showToast("Note deleted")
         }
     }
@@ -322,15 +361,17 @@ class ArkinViewModel(application: Application) : AndroidViewModel(application) {
     fun addTask(title: String, priority: String = "Medium", description: String = "", subject: String = "", dueDate: String = "Today") {
         if (title.isBlank()) return
         viewModelScope.launch {
-            taskDao.insertTask(
-                TaskEntity(
-                    title = title.trim(),
-                    description = description.trim(),
-                    subject = subject.trim(),
-                    priority = priority,
-                    dueDate = dueDate
-                )
+            val task = TaskEntity(
+                title = title.trim(),
+                description = description.trim(),
+                subject = subject.trim(),
+                priority = priority,
+                dueDate = dueDate
             )
+            val id = taskDao.insertTask(task)
+            if (studentProfile.value?.cloudSyncEnabled == true && FirebaseAuthHelper.isUserLoggedIn) {
+                FirestoreManager.saveTask(task.copy(id = id))
+            }
             showToast("Task added")
         }
     }
@@ -339,6 +380,9 @@ class ArkinViewModel(application: Application) : AndroidViewModel(application) {
         viewModelScope.launch {
             val updated = task.copy(isCompleted = !task.isCompleted)
             taskDao.updateTask(updated)
+            if (studentProfile.value?.cloudSyncEnabled == true && FirebaseAuthHelper.isUserLoggedIn) {
+                FirestoreManager.saveTask(updated)
+            }
             if (updated.isCompleted) {
                 showToast("Task completed! 🎉")
             }
@@ -348,6 +392,9 @@ class ArkinViewModel(application: Application) : AndroidViewModel(application) {
     fun deleteTask(task: TaskEntity) {
         viewModelScope.launch {
             taskDao.deleteTask(task)
+            if (studentProfile.value?.cloudSyncEnabled == true && FirebaseAuthHelper.isUserLoggedIn) {
+                FirestoreManager.deleteTask(task.id)
+            }
             showToast("Task removed")
         }
     }
@@ -366,32 +413,33 @@ class ArkinViewModel(application: Application) : AndroidViewModel(application) {
     ) {
         if (title.isBlank() || subject.isBlank()) return
         viewModelScope.launch {
-            val id = homeworkDao.insertHomework(
-                HomeworkEntity(
-                    subject = subject.trim(),
-                    title = title.trim(),
-                    description = description.trim(),
-                    teacherName = teacherName.trim(),
-                    dueDate = dueDate.trim(),
-                    dueTime = dueTime.trim(),
-                    priority = priority,
-                    status = "Not Started",
-                    colorKey = colorKey,
-                    extractedQuestionsJson = extractedQuestions
-                )
+            val hw = HomeworkEntity(
+                subject = subject.trim(),
+                title = title.trim(),
+                description = description.trim(),
+                teacherName = teacherName.trim(),
+                dueDate = dueDate.trim(),
+                dueTime = dueTime.trim(),
+                priority = priority,
+                status = "Not Started",
+                colorKey = colorKey,
+                extractedQuestionsJson = extractedQuestions
             )
-            // Automatically add as a planner task
-            taskDao.insertTask(
-                TaskEntity(
-                    title = "Assignment: $title ($subject)",
-                    description = description,
-                    subject = subject,
-                    priority = priority,
-                    dueDate = dueDate,
-                    dueTime = dueTime,
-                    linkedAssignmentId = id
-                )
+            val id = homeworkDao.insertHomework(hw)
+            val plannerTask = TaskEntity(
+                title = "Assignment: $title ($subject)",
+                description = description,
+                subject = subject,
+                priority = priority,
+                dueDate = dueDate,
+                dueTime = dueTime,
+                linkedAssignmentId = id
             )
+            val taskId = taskDao.insertTask(plannerTask)
+            if (studentProfile.value?.cloudSyncEnabled == true && FirebaseAuthHelper.isUserLoggedIn) {
+                FirestoreManager.saveHomework(hw.copy(id = id))
+                FirestoreManager.saveTask(plannerTask.copy(id = taskId))
+            }
             showToast("Homework added and synced to study planner")
         }
     }
@@ -406,6 +454,9 @@ class ArkinViewModel(application: Application) : AndroidViewModel(application) {
             val updated = hw.copy(status = newStatus, isDone = (newStatus == "Completed" || newStatus == "Submitted"))
             homeworkDao.updateHomework(updated)
             selectedAssignment.value = updated
+            if (studentProfile.value?.cloudSyncEnabled == true && FirebaseAuthHelper.isUserLoggedIn) {
+                FirestoreManager.saveHomework(updated)
+            }
             showToast("Status updated to $newStatus")
         }
     }
@@ -417,6 +468,9 @@ class ArkinViewModel(application: Application) : AndroidViewModel(application) {
             val updated = hw.copy(aiDraftAnswer = answer)
             homeworkDao.updateHomework(updated)
             selectedAssignment.value = updated
+            if (studentProfile.value?.cloudSyncEnabled == true && FirebaseAuthHelper.isUserLoggedIn) {
+                FirestoreManager.saveHomework(updated)
+            }
             _isAiLoading.value = false
             showToast("AI Solution generated!")
         }
@@ -427,6 +481,9 @@ class ArkinViewModel(application: Application) : AndroidViewModel(application) {
             val updated = hw.copy(aiDraftAnswer = draft)
             homeworkDao.updateHomework(updated)
             selectedAssignment.value = updated
+            if (studentProfile.value?.cloudSyncEnabled == true && FirebaseAuthHelper.isUserLoggedIn) {
+                FirestoreManager.saveHomework(updated)
+            }
             showToast("Draft saved")
         }
     }
@@ -441,6 +498,9 @@ class ArkinViewModel(application: Application) : AndroidViewModel(application) {
             if (selectedAssignment.value?.id == hw.id) {
                 selectedAssignment.value = updated
             }
+            if (studentProfile.value?.cloudSyncEnabled == true && FirebaseAuthHelper.isUserLoggedIn) {
+                FirestoreManager.saveHomework(updated)
+            }
             showToast(if (updated.isDone) "Marked as done!" else "Marked as pending")
         }
     }
@@ -450,6 +510,9 @@ class ArkinViewModel(application: Application) : AndroidViewModel(application) {
             homeworkDao.deleteHomework(hw)
             if (selectedAssignment.value?.id == hw.id) {
                 goBack()
+            }
+            if (studentProfile.value?.cloudSyncEnabled == true && FirebaseAuthHelper.isUserLoggedIn) {
+                FirestoreManager.deleteHomework(hw.id)
             }
             showToast("Homework removed")
         }
@@ -471,18 +534,20 @@ class ArkinViewModel(application: Application) : AndroidViewModel(application) {
     ) {
         if (subject.isBlank() || timeSlot.isBlank()) return
         viewModelScope.launch {
-            timetableDao.insertClass(
-                TimetableEntity(
-                    dayOfWeek = selectedDay.value,
-                    subject = subject.trim(),
-                    timeSlot = timeSlot.trim(),
-                    room = room.trim(),
-                    facultyName = facultyName.trim(),
-                    requiredMaterials = requiredMaterials.trim(),
-                    isLab = isLab,
-                    colorKey = colorKey
-                )
+            val entry = TimetableEntity(
+                dayOfWeek = selectedDay.value,
+                subject = subject.trim(),
+                timeSlot = timeSlot.trim(),
+                room = room.trim(),
+                facultyName = facultyName.trim(),
+                requiredMaterials = requiredMaterials.trim(),
+                isLab = isLab,
+                colorKey = colorKey
             )
+            val id = timetableDao.insertClass(entry)
+            if (studentProfile.value?.cloudSyncEnabled == true && FirebaseAuthHelper.isUserLoggedIn) {
+                FirestoreManager.saveTimetableClass(entry.copy(id = id))
+            }
             showToast("Class added to timetable")
         }
     }
@@ -490,6 +555,9 @@ class ArkinViewModel(application: Application) : AndroidViewModel(application) {
     fun deleteClass(entry: TimetableEntity) {
         viewModelScope.launch {
             timetableDao.deleteClass(entry)
+            if (studentProfile.value?.cloudSyncEnabled == true && FirebaseAuthHelper.isUserLoggedIn) {
+                FirestoreManager.deleteTimetableClass(entry.id)
+            }
             showToast("Class removed")
         }
     }
@@ -505,14 +573,16 @@ class ArkinViewModel(application: Application) : AndroidViewModel(application) {
     fun addReminder(title: String, dueText: String, iconKey: String = "bell", colorKey: String = "yellow") {
         if (title.isBlank()) return
         viewModelScope.launch {
-            reminderDao.insertReminder(
-                ReminderEntity(
-                    title = title.trim(),
-                    dueText = dueText.trim(),
-                    iconKey = iconKey,
-                    colorKey = colorKey
-                )
+            val reminder = ReminderEntity(
+                title = title.trim(),
+                dueText = dueText.trim(),
+                iconKey = iconKey,
+                colorKey = colorKey
             )
+            val id = reminderDao.insertReminder(reminder)
+            if (studentProfile.value?.cloudSyncEnabled == true && FirebaseAuthHelper.isUserLoggedIn) {
+                FirestoreManager.saveReminder(reminder.copy(id = id))
+            }
             showToast("Reminder created")
         }
     }
@@ -520,6 +590,9 @@ class ArkinViewModel(application: Application) : AndroidViewModel(application) {
     fun deleteReminder(reminder: ReminderEntity) {
         viewModelScope.launch {
             reminderDao.deleteReminder(reminder)
+            if (studentProfile.value?.cloudSyncEnabled == true && FirebaseAuthHelper.isUserLoggedIn) {
+                FirestoreManager.deleteReminder(reminder.id)
+            }
             showToast("Reminder dismissed")
         }
     }
@@ -528,15 +601,17 @@ class ArkinViewModel(application: Application) : AndroidViewModel(application) {
     fun addExamResult(subject: String, examName: String, marksObtained: Float, totalMarks: Float, semester: String = "Semester 4") {
         if (subject.isBlank() || examName.isBlank() || totalMarks <= 0f) return
         viewModelScope.launch {
-            examResultDao.insertExamResult(
-                ExamResultEntity(
-                    subject = subject.trim(),
-                    examName = examName.trim(),
-                    marksObtained = marksObtained,
-                    totalMarks = totalMarks,
-                    semester = semester.trim()
-                )
+            val exam = ExamResultEntity(
+                subject = subject.trim(),
+                examName = examName.trim(),
+                marksObtained = marksObtained,
+                totalMarks = totalMarks,
+                semester = semester.trim()
             )
+            val id = examResultDao.insertExamResult(exam)
+            if (studentProfile.value?.cloudSyncEnabled == true && FirebaseAuthHelper.isUserLoggedIn) {
+                FirestoreManager.saveExamResult(exam.copy(id = id))
+            }
             showToast("Exam marks recorded!")
         }
     }
@@ -544,6 +619,9 @@ class ArkinViewModel(application: Application) : AndroidViewModel(application) {
     fun deleteExamResult(result: ExamResultEntity) {
         viewModelScope.launch {
             examResultDao.deleteExamResult(result)
+            if (studentProfile.value?.cloudSyncEnabled == true && FirebaseAuthHelper.isUserLoggedIn) {
+                FirestoreManager.deleteExamResult(result.id)
+            }
             showToast("Exam record deleted")
         }
     }
@@ -829,17 +907,19 @@ class ArkinViewModel(application: Application) : AndroidViewModel(application) {
     fun updateProfile(name: String, major: String, email: String, college: String = "", course: String = "", semester: String = "", academicYear: String = "") {
         viewModelScope.launch {
             val current = studentProfile.value ?: StudentProfileEntity()
-            profileDao.updateProfile(
-                current.copy(
-                    name = name.trim(),
-                    major = major.trim(),
-                    email = email.trim(),
-                    collegeName = if (college.isNotBlank()) college.trim() else current.collegeName,
-                    course = if (course.isNotBlank()) course.trim() else current.course,
-                    semester = if (semester.isNotBlank()) semester.trim() else current.semester,
-                    academicYear = if (academicYear.isNotBlank()) academicYear.trim() else current.academicYear
-                )
+            val updated = current.copy(
+                name = name.trim(),
+                major = major.trim(),
+                email = email.trim(),
+                collegeName = if (college.isNotBlank()) college.trim() else current.collegeName,
+                course = if (course.isNotBlank()) course.trim() else current.course,
+                semester = if (semester.isNotBlank()) semester.trim() else current.semester,
+                academicYear = if (academicYear.isNotBlank()) academicYear.trim() else current.academicYear
             )
+            profileDao.updateProfile(updated)
+            if (updated.cloudSyncEnabled && FirebaseAuthHelper.isUserLoggedIn) {
+                FirestoreManager.saveProfile(updated)
+            }
             showToast("Profile updated")
         }
     }
@@ -849,6 +929,9 @@ class ArkinViewModel(application: Application) : AndroidViewModel(application) {
             val current = studentProfile.value ?: StudentProfileEntity()
             val updated = current.copy(isDarkMode = !current.isDarkMode)
             profileDao.updateProfile(updated)
+            if (updated.cloudSyncEnabled && FirebaseAuthHelper.isUserLoggedIn) {
+                FirestoreManager.saveProfile(updated)
+            }
             showToast(if (updated.isDarkMode) "Dark mode enabled" else "Light mode enabled")
         }
     }
@@ -858,6 +941,9 @@ class ArkinViewModel(application: Application) : AndroidViewModel(application) {
             val current = studentProfile.value ?: StudentProfileEntity()
             val updated = current.copy(cloudSyncEnabled = !current.cloudSyncEnabled)
             profileDao.updateProfile(updated)
+            if (updated.cloudSyncEnabled && FirebaseAuthHelper.isUserLoggedIn) {
+                FirestoreManager.saveProfile(updated)
+            }
             showToast(if (updated.cloudSyncEnabled) "Cloud synchronization enabled" else "Cloud sync paused (Local mode)")
         }
     }
@@ -865,12 +951,14 @@ class ArkinViewModel(application: Application) : AndroidViewModel(application) {
     fun updateAiPreferences(style: String, length: String) {
         viewModelScope.launch {
             val current = studentProfile.value ?: StudentProfileEntity()
-            profileDao.updateProfile(
-                current.copy(
-                    aiExplanationStyle = style,
-                    aiAnswerLength = length
-                )
+            val updated = current.copy(
+                aiExplanationStyle = style,
+                aiAnswerLength = length
             )
+            profileDao.updateProfile(updated)
+            if (updated.cloudSyncEnabled && FirebaseAuthHelper.isUserLoggedIn) {
+                FirestoreManager.saveProfile(updated)
+            }
             showToast("AI preferences saved")
         }
     }
@@ -882,8 +970,173 @@ class ArkinViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
+    // ==========================================
+    // Firebase Authentication Actions
+    // ==========================================
+
+    fun signUpWithEmail(
+        fullName: String,
+        email: String,
+        password: String,
+        college: String = "",
+        course: String = "",
+        semester: String = "",
+        academicYear: String = ""
+    ) {
+        isAuthLoading.value = true
+        authError.value = null
+        viewModelScope.launch {
+            val result = FirebaseAuthHelper.signUpWithEmail(email, password, fullName)
+            isAuthLoading.value = false
+            if (result.isSuccess) {
+                val user = result.getOrNull()!!
+                val newProfile = StudentProfileEntity(
+                    id = 1,
+                    name = fullName.ifBlank { "Student" },
+                    email = email.trim(),
+                    major = if (course.isNotBlank()) "$course, $semester" else "Computer Science",
+                    collegeName = college.ifBlank { "National Institute of Technology" },
+                    course = course.ifBlank { "B.Tech Computer Science" },
+                    semester = semester.ifBlank { "Semester 4" },
+                    academicYear = academicYear.ifBlank { "2025-2026" },
+                    lastBackupDate = System.currentTimeMillis()
+                )
+                profileDao.updateProfile(newProfile)
+                FirestoreManager.saveProfile(newProfile, user.uid)
+                // Upload sample student productivity data to new Firebase user
+                FirestoreManager.syncLocalToFirestore(db)
+                showToast("Account created successfully! Welcome to Arkin, $fullName 🎉")
+                navigateTo(AppScreen.DASHBOARD)
+            } else {
+                val err = result.exceptionOrNull()?.message ?: "Sign up failed"
+                authError.value = err
+                showToast(err)
+            }
+        }
+    }
+
+    fun signInWithEmail(email: String, password: String) {
+        isAuthLoading.value = true
+        authError.value = null
+        viewModelScope.launch {
+            val result = FirebaseAuthHelper.signInWithEmail(email, password)
+            isAuthLoading.value = false
+            if (result.isSuccess) {
+                val user = result.getOrNull()!!
+                val remoteProfile = FirestoreManager.fetchProfile(user.uid)
+                if (remoteProfile != null) {
+                    profileDao.updateProfile(remoteProfile)
+                } else {
+                    val current = studentProfile.value ?: StudentProfileEntity()
+                    val updated = current.copy(
+                        name = user.displayName ?: current.name,
+                        email = user.email ?: current.email
+                    )
+                    profileDao.updateProfile(updated)
+                    FirestoreManager.saveProfile(updated, user.uid)
+                }
+                FirestoreManager.syncFirestoreToLocal(db, merge = true)
+                showToast("Welcome back, ${user.displayName ?: user.email}! 👋")
+                navigateTo(AppScreen.DASHBOARD)
+            } else {
+                val err = result.exceptionOrNull()?.message ?: "Login failed"
+                authError.value = err
+                showToast(err)
+            }
+        }
+    }
+
+    fun signInWithGoogle(context: Context) {
+        isAuthLoading.value = true
+        authError.value = null
+        viewModelScope.launch {
+            val result = FirebaseAuthHelper.signInWithGoogle(context)
+            isAuthLoading.value = false
+            if (result.isSuccess) {
+                val user = result.getOrNull()!!
+                val remoteProfile = FirestoreManager.fetchProfile(user.uid)
+                if (remoteProfile != null) {
+                    profileDao.updateProfile(remoteProfile)
+                } else {
+                    val current = studentProfile.value ?: StudentProfileEntity()
+                    val updated = current.copy(
+                        name = user.displayName ?: current.name,
+                        email = user.email ?: current.email
+                    )
+                    profileDao.updateProfile(updated)
+                    FirestoreManager.saveProfile(updated, user.uid)
+                }
+                FirestoreManager.syncFirestoreToLocal(db, merge = true)
+                showToast("Signed in with Google! Welcome, ${user.displayName ?: user.email} 🎉")
+                navigateTo(AppScreen.DASHBOARD)
+            } else {
+                val ex = result.exceptionOrNull()
+                if (ex !is java.util.concurrent.CancellationException) {
+                    val err = ex?.message ?: "Google Sign-In failed"
+                    authError.value = err
+                    showToast(err)
+                }
+            }
+        }
+    }
+
+    fun sendPasswordReset(email: String) {
+        if (email.isBlank() || !email.contains("@")) {
+            showToast("Please enter a valid email address.")
+            return
+        }
+        viewModelScope.launch {
+            val result = FirebaseAuthHelper.sendPasswordReset(email)
+            if (result.isSuccess) {
+                showToast("Password reset link sent to $email! Please check your inbox.")
+            } else {
+                val err = result.exceptionOrNull()?.message ?: "Failed to send reset link"
+                showToast(err)
+            }
+        }
+    }
+
+    fun syncToFirestore() {
+        if (!FirebaseAuthHelper.isUserLoggedIn) {
+            showToast("Please log in to sync with Firebase Firestore")
+            return
+        }
+        isFirestoreSyncing.value = true
+        viewModelScope.launch {
+            val result = FirestoreManager.syncLocalToFirestore(db)
+            isFirestoreSyncing.value = false
+            if (result.isSuccess) {
+                lastFirestoreSyncTime.value = System.currentTimeMillis()
+                showToast("Successfully backed up ${result.getOrNull()} items to Firestore! ☁️")
+            } else {
+                val err = result.exceptionOrNull()?.message ?: "Sync failed"
+                showToast("Firestore sync failed: $err")
+            }
+        }
+    }
+
+    fun syncFromFirestore() {
+        if (!FirebaseAuthHelper.isUserLoggedIn) {
+            showToast("Please log in to restore from Firebase Firestore")
+            return
+        }
+        isFirestoreSyncing.value = true
+        viewModelScope.launch {
+            val result = FirestoreManager.syncFirestoreToLocal(db, merge = true)
+            isFirestoreSyncing.value = false
+            if (result.isSuccess) {
+                lastFirestoreSyncTime.value = System.currentTimeMillis()
+                showToast("Restored ${result.getOrNull()} items from Firestore! ☁️")
+            } else {
+                val err = result.exceptionOrNull()?.message ?: "Restore failed"
+                showToast("Firestore restore failed: $err")
+            }
+        }
+    }
+
     fun logout() {
+        FirebaseAuthHelper.signOut()
         navigateTo(AppScreen.AUTH, addToStack = false)
-        showToast("Logged out")
+        showToast("Signed out of Firebase")
     }
 }

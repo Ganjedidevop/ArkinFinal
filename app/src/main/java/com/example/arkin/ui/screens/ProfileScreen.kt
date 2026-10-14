@@ -73,6 +73,7 @@ import com.example.ui.theme.ArkinPrimary
 @Composable
 fun ProfileScreen(viewModel: ArkinViewModel) {
     val profile by viewModel.studentProfile.collectAsState()
+    val firebaseUser by viewModel.firebaseUser.collectAsState()
     var isEditProfileDialogOpen by remember { mutableStateOf(false) }
     var isChangePinDialogOpen by remember { mutableStateOf(false) }
 
@@ -162,7 +163,63 @@ fun ProfileScreen(viewModel: ArkinViewModel) {
                 }
             }
 
-            Spacer(modifier = Modifier.height(24.dp))
+            Spacer(modifier = Modifier.height(18.dp))
+
+            // Firebase Backend Connection Card
+            Card(
+                shape = RoundedCornerShape(18.dp),
+                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+                elevation = CardDefaults.cardElevation(defaultElevation = 1.dp),
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(14.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Surface(
+                        shape = CircleShape,
+                        color = Color(0xFFFEF3C7),
+                        modifier = Modifier.size(38.dp)
+                    ) {
+                        Box(contentAlignment = Alignment.Center) {
+                            Text("🔥", fontSize = 18.sp)
+                        }
+                    }
+                    Spacer(modifier = Modifier.width(12.dp))
+                    Column(modifier = Modifier.weight(1f)) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Text(
+                                text = "Firebase Backend",
+                                fontWeight = FontWeight.Bold,
+                                fontSize = 13.sp,
+                                color = MaterialTheme.colorScheme.onSurface
+                            )
+                            Spacer(modifier = Modifier.width(6.dp))
+                            Surface(
+                                shape = RoundedCornerShape(4.dp),
+                                color = if (firebaseUser != null) Color(0xFFDCFCE7) else Color(0xFFF3F4F6)
+                            ) {
+                                Text(
+                                    text = if (firebaseUser != null) "ONLINE" else "GUEST",
+                                    fontSize = 9.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    color = if (firebaseUser != null) Color(0xFF16A34A) else Color(0xFF6B7280),
+                                    modifier = Modifier.padding(horizontal = 5.dp, vertical = 2.dp)
+                                )
+                            }
+                        }
+                        Text(
+                            text = if (firebaseUser != null) "${firebaseUser?.email ?: firebaseUser?.uid} • arkin-22b82" else "arkin-22b82 • Firestore Active",
+                            fontSize = 11.sp,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                }
+            }
+
+            Spacer(modifier = Modifier.height(18.dp))
 
             // Settings Menu Items Group
             Card(
@@ -270,7 +327,7 @@ fun ProfileScreen(viewModel: ArkinViewModel) {
             Spacer(modifier = Modifier.height(28.dp))
 
             Text(
-                text = "Arkin v1.0 • Built with Gemini AI & Room",
+                text = "Arkin v1.0 • Powered by Firebase (arkin-22b82) & Gemini AI",
                 fontSize = 11.sp,
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )

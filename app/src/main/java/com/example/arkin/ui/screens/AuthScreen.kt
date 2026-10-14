@@ -35,6 +35,7 @@ import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Checkbox
 import androidx.compose.material3.CheckboxDefaults
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -46,6 +47,7 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.ui.window.Dialog
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -55,6 +57,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
@@ -71,6 +74,10 @@ import com.example.ui.theme.ArkinPrimary
 @Composable
 fun AuthScreen(viewModel: ArkinViewModel) {
     var isSignUp by remember { mutableStateOf(false) }
+
+    val isAuthLoading by viewModel.isAuthLoading.collectAsState()
+    val authError by viewModel.authError.collectAsState()
+    val context = LocalContext.current
 
     // Form States
     var emailOrPhone by remember { mutableStateOf("rohan.sharma@campus.edu") }
@@ -264,7 +271,8 @@ fun AuthScreen(viewModel: ArkinViewModel) {
         }
 
         // Error Banner
-        if (errorMessage != null) {
+        val displayedError = errorMessage ?: authError
+        if (displayedError != null) {
             Surface(
                 shape = RoundedCornerShape(12.dp),
                 color = Color(0xFFFEE2E2),
@@ -277,7 +285,7 @@ fun AuthScreen(viewModel: ArkinViewModel) {
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     Text(
-                        text = "⚠️ ${errorMessage!!}",
+                        text = "⚠️ $displayedError",
                         color = Color(0xFFDC2626),
                         fontSize = 12.sp,
                         fontWeight = FontWeight.SemiBold
@@ -484,20 +492,19 @@ fun AuthScreen(viewModel: ArkinViewModel) {
                         !agreedTerms -> errorMessage = "Please accept the Terms & Privacy Code."
                         else -> {
                             errorMessage = null
-                            viewModel.updateProfile(
-                                name = fullName,
-                                major = "$course, $semester",
+                            viewModel.signUpWithEmail(
+                                fullName = fullName,
                                 email = emailOrPhone,
+                                password = password,
                                 college = collegeName,
                                 course = course,
                                 semester = semester,
                                 academicYear = academicYear
                             )
-                            viewModel.showToast("Welcome to Arkin, $fullName! 🎉")
-                            viewModel.navigateTo(AppScreen.DASHBOARD)
                         }
                     }
                 },
+                enabled = !isAuthLoading,
                 shape = RoundedCornerShape(22.dp),
                 colors = ButtonDefaults.buttonColors(containerColor = ArkinPrimary),
                 modifier = Modifier
@@ -505,13 +512,21 @@ fun AuthScreen(viewModel: ArkinViewModel) {
                     .height(54.dp)
                     .testTag("signup_submit_button")
             ) {
-                Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.Center
-                ) {
-                    Text("Create Student Account", fontSize = 16.sp, fontWeight = FontWeight.Bold, color = Color.White)
-                    Spacer(modifier = Modifier.width(8.dp))
-                    Icon(Icons.AutoMirrored.Filled.ArrowForward, contentDescription = null, tint = Color.White, modifier = Modifier.size(18.dp))
+                if (isAuthLoading) {
+                    CircularProgressIndicator(
+                        color = Color.White,
+                        strokeWidth = 2.dp,
+                        modifier = Modifier.size(22.dp)
+                    )
+                } else {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.Center
+                    ) {
+                        Text("Create Student Account", fontSize = 16.sp, fontWeight = FontWeight.Bold, color = Color.White)
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Icon(Icons.AutoMirrored.Filled.ArrowForward, contentDescription = null, tint = Color.White, modifier = Modifier.size(18.dp))
+                    }
                 }
             }
 
@@ -623,27 +638,10 @@ fun AuthScreen(viewModel: ArkinViewModel) {
                         errorMessage = "Please enter your password."
                     } else {
                         errorMessage = null
-                        val existing = viewModel.studentProfile.value
-                        val studentName = if (existing != null && existing.name.isNotBlank()) existing.name else "Rohan Sharma"
-                        val studentMajor = if (existing != null && existing.major.isNotBlank()) existing.major else "Computer Science & Engineering"
-                        val college = if (existing != null && existing.collegeName.isNotBlank()) existing.collegeName else "National Institute of Technology"
-                        val courseVal = if (existing != null && existing.course.isNotBlank()) existing.course else "B.Tech Computer Science"
-                        val semVal = if (existing != null && existing.semester.isNotBlank()) existing.semester else "Semester 4"
-                        val yearVal = if (existing != null && existing.academicYear.isNotBlank()) existing.academicYear else "2025-2026"
-
-                        viewModel.updateProfile(
-                            name = studentName,
-                            major = studentMajor,
-                            email = emailOrPhone.trim(),
-                            college = college,
-                            course = courseVal,
-                            semester = semVal,
-                            academicYear = yearVal
-                        )
-                        viewModel.showToast("Welcome back, $studentName! 👋")
-                        viewModel.navigateTo(AppScreen.DASHBOARD)
+                        viewModel.signInWithEmail(emailOrPhone.trim(), password)
                     }
                 },
+                enabled = !isAuthLoading,
                 shape = RoundedCornerShape(22.dp),
                 colors = ButtonDefaults.buttonColors(containerColor = ArkinPrimary),
                 modifier = Modifier
@@ -651,13 +649,21 @@ fun AuthScreen(viewModel: ArkinViewModel) {
                     .height(54.dp)
                     .testTag("login_submit_button")
             ) {
-                Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.Center
-                ) {
-                    Text("Login", fontSize = 16.sp, fontWeight = FontWeight.Bold, color = Color.White)
-                    Spacer(modifier = Modifier.width(8.dp))
-                    Icon(Icons.AutoMirrored.Filled.ArrowForward, contentDescription = null, tint = Color.White, modifier = Modifier.size(18.dp))
+                if (isAuthLoading) {
+                    CircularProgressIndicator(
+                        color = Color.White,
+                        strokeWidth = 2.dp,
+                        modifier = Modifier.size(22.dp)
+                    )
+                } else {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.Center
+                    ) {
+                        Text("Login", fontSize = 16.sp, fontWeight = FontWeight.Bold, color = Color.White)
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Icon(Icons.AutoMirrored.Filled.ArrowForward, contentDescription = null, tint = Color.White, modifier = Modifier.size(18.dp))
+                    }
                 }
             }
 
@@ -684,23 +690,32 @@ fun AuthScreen(viewModel: ArkinViewModel) {
             // Continue with Google
             OutlinedButton(
                 onClick = {
-                    viewModel.updateProfile("Rohan Sharma", "Computer Science, 2nd Year", "rohan.sharma@campus.edu")
-                    viewModel.navigateTo(AppScreen.DASHBOARD)
+                    errorMessage = null
+                    viewModel.signInWithGoogle(context)
                 },
+                enabled = !isAuthLoading,
                 shape = RoundedCornerShape(20.dp),
                 modifier = Modifier
                     .fillMaxWidth()
                     .height(50.dp)
                     .testTag("login_google_button")
             ) {
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Text("🇬", fontSize = 16.sp)
-                    Spacer(modifier = Modifier.width(10.dp))
-                    Text(
-                        text = "Continue with Google",
-                        fontWeight = FontWeight.SemiBold,
-                        color = MaterialTheme.colorScheme.onSurface
+                if (isAuthLoading) {
+                    CircularProgressIndicator(
+                        color = ArkinPrimary,
+                        strokeWidth = 2.dp,
+                        modifier = Modifier.size(20.dp)
                     )
+                } else {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Text("🇬", fontSize = 16.sp)
+                        Spacer(modifier = Modifier.width(10.dp))
+                        Text(
+                            text = "Continue with Google",
+                            fontWeight = FontWeight.SemiBold,
+                            color = MaterialTheme.colorScheme.onSurface
+                        )
+                    }
                 }
             }
 
@@ -758,7 +773,7 @@ fun AuthScreen(viewModel: ArkinViewModel) {
             initialEmail = resetEmailInput,
             onDismiss = { isForgotPasswordDialogOpen = false },
             onSendReset = { email ->
-                viewModel.showToast("Password reset link sent to $email! Please check your inbox.")
+                viewModel.sendPasswordReset(email)
                 isForgotPasswordDialogOpen = false
             }
         )
