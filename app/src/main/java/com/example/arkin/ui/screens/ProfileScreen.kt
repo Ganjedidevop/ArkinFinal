@@ -321,7 +321,7 @@ fun ProfileScreen(viewModel: ArkinViewModel) {
             Spacer(modifier = Modifier.height(28.dp))
 
             Text(
-                text = "Arkin v1.0 • Powered by Firebase (arkin-22b82) & Gemini AI",
+                text = "Arkin v1.0 • Powered by Firebase (arkin-22b82) & Groq AI",
                 fontSize = 11.sp,
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )

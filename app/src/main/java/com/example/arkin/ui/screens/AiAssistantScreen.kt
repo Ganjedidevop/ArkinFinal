@@ -141,7 +141,7 @@ fun AiAssistantScreen(viewModel: ArkinViewModel) {
                             )
                             Spacer(modifier = Modifier.width(4.dp))
                             Text(
-                                text = "Online (Gemini 3.5)",
+                                text = "Online (Groq AI)",
                                 fontSize = 11.sp,
                                 color = Color(0xFF22C55E),
                                 fontWeight = FontWeight.SemiBold

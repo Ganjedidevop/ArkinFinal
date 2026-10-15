@@ -5,7 +5,7 @@ import android.content.Context
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.example.arkin.data.ArkinDatabase
-import com.example.arkin.data.ai.GeminiHelper
+import com.example.arkin.data.ai.GroqHelper
 import com.example.arkin.data.backup.BackupManager
 import com.example.arkin.data.backup.BackupPreview
 import com.example.arkin.data.firebase.FirebaseAuthHelper
@@ -468,7 +468,7 @@ class ArkinViewModel(application: Application) : AndroidViewModel(application) {
     fun solveAssignmentQuestionWithAi(hw: HomeworkEntity, question: String) {
         _isAiLoading.value = true
         viewModelScope.launch {
-            val answer = GeminiHelper.solveAssignmentQuestion(hw.title, question)
+            val answer = GroqHelper.solveAssignmentQuestion(hw.title, question)
             val updated = hw.copy(aiDraftAnswer = answer)
             homeworkDao.updateHomework(updated)
             selectedAssignment.value = updated
@@ -772,7 +772,7 @@ class ArkinViewModel(application: Application) : AndroidViewModel(application) {
             val notesSummary = filteredPublicNotes.value.take(3).joinToString("\n---\n") {
                 "${it.title}: ${it.content}"
             }
-            val aiResponse = GeminiHelper.askAssistant(trimmed, notesSummary, history)
+            val aiResponse = GroqHelper.askAssistant(trimmed, notesSummary, history)
             _chatMessages.value = _chatMessages.value + ChatMessage(sender = "ai", text = aiResponse)
             _isAiLoading.value = false
         }
@@ -833,7 +833,7 @@ class ArkinViewModel(application: Application) : AndroidViewModel(application) {
                 }
             } + if (customPrompt.isNotBlank()) "\nStudent notes: $customPrompt" else ""
 
-            val result = GeminiHelper.askAssistant(prompt)
+            val result = GroqHelper.askAssistant(prompt)
             analyzedDocResult.value = result
             isAnalyzingDoc.value = false
             parsedClasses.value = emptyList()

@@ -46,7 +46,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
-import com.example.arkin.data.ai.GeminiHelper
+import com.example.arkin.data.ai.GroqHelper
 import com.example.arkin.data.model.NoteEntity
 import com.example.ui.theme.ArkinPrimary
 import kotlinx.coroutines.launch
@@ -152,13 +152,13 @@ fun NoteDialog(
                     modifier = Modifier.fillMaxWidth()
                 ) {
 
-                    // AI Summarize Button (gemini-1.5-flash study summarizer)
+                    // AI Summarize Button (Groq study summarizer)
                     Surface(
                         onClick = {
                             if (content.isNotBlank() && !isAiSummarizing) {
                                 isAiSummarizing = true
                                 coroutineScope.launch {
-                                    val summary = GeminiHelper.askAssistant(
+                                    val summary = GroqHelper.askAssistant(
                                         "Summarize the following study notes into structured, highly concise bullet points suitable for quick exam revision. Input text: $content"
                                     )
                                     content = if (content.contains("--- 📌 AI Exam Revision Summary ---")) {
@@ -218,7 +218,7 @@ fun NoteDialog(
                             if (content.isNotBlank() && !isAiEnhancing) {
                                 isAiEnhancing = true
                                 coroutineScope.launch {
-                                    val improved = GeminiHelper.askAssistant(
+                                    val improved = GroqHelper.askAssistant(
                                         "Expand and structure this student note neatly with bullet points and bold key terms:\nTitle: $title\nContent:\n$content"
                                     )
                                     content = improved
