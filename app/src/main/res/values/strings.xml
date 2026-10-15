@@ -1,9 +1,9 @@
 <resources>
     <string name="app_name">Arkin</string>
     <!-- Web Client ID for Google Sign-In with Credential Manager / Firebase Auth.
-         Matches the OAuth 2.0 Web Client ID in Firebase project arkin-64543.
+         Matches the OAuth 2.0 Web Client ID in Firebase project arkin-22b82.
          Can also be overridden in .env as GOOGLE_WEB_CLIENT_ID. -->
-    <string name="default_web_client_id">229050641550-rcausacd6bll77e5idd576bp9r0h45ng.apps.googleusercontent.com</string>
-    <string name="firebase_project_id">arkin-64543</string>
-    <string name="firebase_app_id">1:229050641550:android:69b3f5162e93fa14806ddf</string>
+    <string name="default_web_client_id">605569501594-6e4jlodgmjst33tcg13na9jf6h68dh6t.apps.googleusercontent.com</string>
+    <string name="firebase_project_id">arkin-22b82</string>
+    <string name="firebase_app_id">1:605569501594:android:077f691f06780f24e19223</string>
 </resources>

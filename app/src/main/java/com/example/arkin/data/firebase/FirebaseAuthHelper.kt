@@ -175,7 +175,7 @@ object FirebaseAuthHelper {
             Result.failure(
                 IllegalStateException(
                     "Google Sign-In failed: ${e.message}. " +
-                            "Make sure Google Sign-In is enabled in Firebase Console (arkin-64543) and the SHA-1 fingerprint matches."
+                            "Make sure Google Sign-In is enabled in Firebase Console (arkin-22b82) and the SHA-1 fingerprint matches."
                 )
             )
         } catch (e: Exception) {

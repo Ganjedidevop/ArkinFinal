@@ -212,7 +212,7 @@ fun ProfileScreen(viewModel: ArkinViewModel) {
                             }
                         }
                         Text(
-                            text = if (firebaseUser != null) "${firebaseUser?.email ?: firebaseUser?.uid} • arkin-64543" else "arkin-64543 • Firestore Active",
+                            text = if (firebaseUser != null) "${firebaseUser?.email ?: firebaseUser?.uid} • arkin-22b82" else "arkin-22b82 • Firestore Active",
                             fontSize = 11.sp,
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
@@ -321,7 +321,7 @@ fun ProfileScreen(viewModel: ArkinViewModel) {
             Spacer(modifier = Modifier.height(28.dp))
 
             Text(
-                text = "Arkin v1.0 • Powered by Firebase (arkin-64543) & Gemini AI",
+                text = "Arkin v1.0 • Powered by Firebase (arkin-22b82) & Gemini AI",
                 fontSize = 11.sp,
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )
