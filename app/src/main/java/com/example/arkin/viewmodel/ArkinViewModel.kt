@@ -18,6 +18,9 @@ import com.example.arkin.data.model.StudentProfileEntity
 import com.example.arkin.data.model.TaskEntity
 import com.example.arkin.data.model.TimetableEntity
 import com.example.arkin.data.model.VaultItemEntity
+import com.example.arkin.data.security.PinVerificationResult
+import com.example.arkin.data.security.VaultSecurityManager
+import android.net.Uri
 import com.example.arkin.model.AppScreen
 import com.example.arkin.model.BottomNavTab
 import com.example.arkin.model.ChatMessage
@@ -185,6 +188,7 @@ class ArkinViewModel(application: Application) : AndroidViewModel(application) {
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), FirebaseAuthHelper.currentUser)
     val isAuthLoading = MutableStateFlow(false)
     val authError = MutableStateFlow<String?>(null)
+    val needsProfileSetup = MutableStateFlow(false)
     val isFirestoreSyncing = MutableStateFlow(false)
     val lastFirestoreSyncTime = MutableStateFlow<Long?>(null)
 
@@ -192,7 +196,7 @@ class ArkinViewModel(application: Application) : AndroidViewModel(application) {
         viewModelScope.launch {
             val prof = profileDao.getProfileSync()
             if (prof == null) {
-                ArkinDatabase.populateInitialData(db)
+                profileDao.insertProfile(StudentProfileEntity())
             }
             // If user is already authenticated with Firebase, pull latest cloud data
             if (FirebaseAuthHelper.isUserLoggedIn) {
@@ -635,15 +639,45 @@ class ArkinViewModel(application: Application) : AndroidViewModel(application) {
                     title = title.trim(),
                     category = category.trim(),
                     content = content.trim(),
-                    attachmentName = attachmentName
+                    attachmentName = attachmentName,
+                    fileType = "TEXT"
                 )
             )
             showToast("Item securely saved in Vault 🔒")
         }
     }
 
+    fun addVaultAttachment(title: String, category: String, uri: Uri, fileType: String, customName: String? = null) {
+        if (title.isBlank()) return
+        viewModelScope.launch {
+            val context = getApplication<Application>().applicationContext
+            val encryptResult = VaultSecurityManager.encryptAndStoreAttachment(context, uri, customName)
+            encryptResult.onSuccess { enc ->
+                vaultItemDao.insertVaultItem(
+                    VaultItemEntity(
+                        title = title.trim(),
+                        category = category.trim(),
+                        content = "",
+                        attachmentUri = enc.encryptedRelativePath,
+                        attachmentName = enc.originalFileName,
+                        fileType = fileType,
+                        fileSize = enc.fileSize,
+                        mimeType = enc.mimeType
+                    )
+                )
+                showToast("File encrypted & secured in Vault 🔒")
+            }.onFailure { err ->
+                showToast("Encryption failed: ${err.message}")
+            }
+        }
+    }
+
     fun deleteVaultItem(item: VaultItemEntity) {
         viewModelScope.launch {
+            val context = getApplication<Application>().applicationContext
+            if (!item.attachmentUri.isNullOrBlank()) {
+                VaultSecurityManager.deleteEncryptedFile(context, item.attachmentUri)
+            }
             vaultItemDao.deleteVaultItem(item)
             showToast("Vault item deleted")
         }
@@ -657,18 +691,38 @@ class ArkinViewModel(application: Application) : AndroidViewModel(application) {
             _isPinError.value = false
 
             if (newPin.length == 4) {
-                val correctPin = studentProfile.value?.lockerPin ?: "1234"
-                if (newPin == correctPin) {
+                val context = getApplication<Application>().applicationContext
+                if (!VaultSecurityManager.isPinSet(context)) {
+                    VaultSecurityManager.setPin(context, newPin)
                     _isVaultUnlocked.value = true
                     _enteredPin.value = ""
-                    showToast("Vault unlocked 🔓")
-                } else {
-                    _isPinError.value = true
-                    showToast("Incorrect PIN")
-                    viewModelScope.launch {
-                        kotlinx.coroutines.delay(400)
+                    showToast("PIN created & Vault unlocked 🔓")
+                    return
+                }
+
+                when (val result = VaultSecurityManager.verifyCurrentPin(context, newPin)) {
+                    is PinVerificationResult.Success -> {
+                        _isVaultUnlocked.value = true
                         _enteredPin.value = ""
-                        _isPinError.value = false
+                        showToast("Vault unlocked 🔓")
+                    }
+                    is PinVerificationResult.Failure -> {
+                        _isPinError.value = true
+                        showToast("Incorrect PIN (${result.attemptsRemaining} left)")
+                        viewModelScope.launch {
+                            kotlinx.coroutines.delay(400)
+                            _enteredPin.value = ""
+                            _isPinError.value = false
+                        }
+                    }
+                    is PinVerificationResult.LockedOut -> {
+                        _isPinError.value = true
+                        showToast("Vault locked. Try again in ${result.remainingSeconds}s")
+                        viewModelScope.launch {
+                            kotlinx.coroutines.delay(400)
+                            _enteredPin.value = ""
+                            _isPinError.value = false
+                        }
                     }
                 }
             }
@@ -696,11 +750,9 @@ class ArkinViewModel(application: Application) : AndroidViewModel(application) {
 
     fun changeLockerPin(newPin: String) {
         if (newPin.length == 4 && newPin.all { it.isDigit() }) {
-            viewModelScope.launch {
-                val current = studentProfile.value ?: StudentProfileEntity()
-                profileDao.updateProfile(current.copy(lockerPin = newPin))
-                showToast("Locker PIN updated to $newPin")
-            }
+            val context = getApplication<Application>().applicationContext
+            VaultSecurityManager.setPin(context, newPin)
+            showToast("Locker PIN updated successfully 🔒")
         } else {
             showToast("PIN must be 4 digits")
         }
@@ -784,33 +836,10 @@ class ArkinViewModel(application: Application) : AndroidViewModel(application) {
             val result = GeminiHelper.askAssistant(prompt)
             analyzedDocResult.value = result
             isAnalyzingDoc.value = false
-
-            when (type) {
-                DocUploadType.TIMETABLE -> {
-                    parsedClasses.value = listOf(
-                        ParsedTimetableClass("Mon", "Advanced DBMS", "09:00 AM - 10:30 AM", "Lab 3", "Prof. Verma", "purple"),
-                        ParsedTimetableClass("Mon", "Distributed Computing", "11:00 AM - 12:30 PM", "Hall 102", "Dr. S. K. Gupta", "teal"),
-                        ParsedTimetableClass("Wed", "AI & Machine Learning", "10:00 AM - 11:30 AM", "Room 405", "Dr. Preeti Singh", "blue"),
-                        ParsedTimetableClass("Thu", "Computer Architecture", "01:30 PM - 03:00 PM", "Room 201", "Prof. Mehra", "orange"),
-                        ParsedTimetableClass("Fri", "Cloud Systems Lab", "02:00 PM - 04:30 PM", "AI Lab 1", "Dr. Ananya Ray", "pink")
-                    )
-                }
-                DocUploadType.ASSIGNMENT -> {
-                    parsedAssignments.value = listOf(
-                        Triple("Operating Systems", "Lab Assignment 4: Process Synchronization", "Next Monday, 11:59 PM"),
-                        Triple("Distributed Systems", "RPC & RMI Implementation Exercise", "Friday, 5:00 PM")
-                    )
-                }
-                DocUploadType.QUESTION_PAPER -> {
-                    parsedExamQuestions.value = listOf(
-                        "Explain 2-Phase Locking protocol (2PL) and prove how it guarantees serializability.",
-                        "Compare Paging vs Segmentation in virtual memory architectures.",
-                        "Solve the Deadlock Banker's Algorithm with given allocation and max matrices."
-                    )
-                }
-                else -> {}
-            }
-            showToast("Document analyzed & organized by Arkin AI ✨")
+            parsedClasses.value = emptyList()
+            parsedAssignments.value = emptyList()
+            parsedExamQuestions.value = emptyList()
+            showToast("Document analyzed by Arkin AI ✨")
         }
     }
 
@@ -963,12 +992,6 @@ class ArkinViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
-    fun resetToDemoData() {
-        viewModelScope.launch {
-            ArkinDatabase.populateInitialData(db)
-            showToast("Demo data reloaded")
-        }
-    }
 
     // ==========================================
     // Firebase Authentication Actions
@@ -992,20 +1015,19 @@ class ArkinViewModel(application: Application) : AndroidViewModel(application) {
                 val user = result.getOrNull()!!
                 val newProfile = StudentProfileEntity(
                     id = 1,
-                    name = fullName.ifBlank { "Student" },
+                    name = fullName.trim().ifBlank { "Student" },
                     email = email.trim(),
-                    major = if (course.isNotBlank()) "$course, $semester" else "Computer Science",
-                    collegeName = college.ifBlank { "National Institute of Technology" },
-                    course = course.ifBlank { "B.Tech Computer Science" },
-                    semester = semester.ifBlank { "Semester 4" },
-                    academicYear = academicYear.ifBlank { "2025-2026" },
+                    major = if (course.isNotBlank() && semester.isNotBlank()) "$course, $semester" else course.ifBlank { semester },
+                    collegeName = college.trim(),
+                    course = course.trim(),
+                    semester = semester.trim(),
+                    academicYear = academicYear.trim(),
                     lastBackupDate = System.currentTimeMillis()
                 )
                 profileDao.updateProfile(newProfile)
                 FirestoreManager.saveProfile(newProfile, user.uid)
-                // Upload sample student productivity data to new Firebase user
                 FirestoreManager.syncLocalToFirestore(db)
-                showToast("Account created successfully! Welcome to Arkin, $fullName 🎉")
+                showToast("Account created successfully! Welcome to Arkin, ${newProfile.name} 🎉")
                 navigateTo(AppScreen.DASHBOARD)
             } else {
                 val err = result.exceptionOrNull()?.message ?: "Sign up failed"
@@ -1054,21 +1076,31 @@ class ArkinViewModel(application: Application) : AndroidViewModel(application) {
             isAuthLoading.value = false
             if (result.isSuccess) {
                 val user = result.getOrNull()!!
-                val remoteProfile = FirestoreManager.fetchProfile(user.uid)
-                if (remoteProfile != null) {
-                    profileDao.updateProfile(remoteProfile)
-                } else {
+                try {
+                    val remoteProfile = FirestoreManager.fetchProfile(user.uid)
+                    if (remoteProfile != null && remoteProfile.collegeName.isNotBlank() && remoteProfile.course.isNotBlank()) {
+                        profileDao.updateProfile(remoteProfile)
+                        FirestoreManager.syncFirestoreToLocal(db, merge = true)
+                        showToast("Welcome back, ${user.displayName ?: user.email}! 🎉")
+                        navigateTo(AppScreen.DASHBOARD)
+                    } else {
+                        val current = studentProfile.value ?: StudentProfileEntity()
+                        val updated = current.copy(
+                            name = user.displayName?.takeIf { it.isNotBlank() } ?: current.name,
+                            email = user.email?.takeIf { it.isNotBlank() } ?: current.email
+                        )
+                        profileDao.updateProfile(updated)
+                        needsProfileSetup.value = true
+                    }
+                } catch (e: Exception) {
                     val current = studentProfile.value ?: StudentProfileEntity()
                     val updated = current.copy(
-                        name = user.displayName ?: current.name,
-                        email = user.email ?: current.email
+                        name = user.displayName?.takeIf { it.isNotBlank() } ?: current.name,
+                        email = user.email?.takeIf { it.isNotBlank() } ?: current.email
                     )
                     profileDao.updateProfile(updated)
-                    FirestoreManager.saveProfile(updated, user.uid)
+                    needsProfileSetup.value = true
                 }
-                FirestoreManager.syncFirestoreToLocal(db, merge = true)
-                showToast("Signed in with Google! Welcome, ${user.displayName ?: user.email} 🎉")
-                navigateTo(AppScreen.DASHBOARD)
             } else {
                 val ex = result.exceptionOrNull()
                 if (ex !is java.util.concurrent.CancellationException) {
@@ -1077,6 +1109,42 @@ class ArkinViewModel(application: Application) : AndroidViewModel(application) {
                     showToast(err)
                 }
             }
+        }
+    }
+
+    fun completeGoogleProfileSetup(
+        fullName: String,
+        college: String,
+        course: String,
+        semester: String,
+        academicYear: String
+    ) {
+        isAuthLoading.value = true
+        viewModelScope.launch {
+            val user = FirebaseAuthHelper.currentUser
+            val current = studentProfile.value ?: StudentProfileEntity()
+            val updated = current.copy(
+                name = fullName.trim().ifBlank { current.name.ifBlank { "Student" } },
+                email = user?.email ?: current.email,
+                major = if (course.isNotBlank() && semester.isNotBlank()) "$course, $semester" else course.ifBlank { semester },
+                collegeName = college.trim(),
+                course = course.trim(),
+                semester = semester.trim(),
+                academicYear = academicYear.trim(),
+                lastBackupDate = System.currentTimeMillis()
+            )
+            profileDao.updateProfile(updated)
+            if (user != null) {
+                try {
+                    FirestoreManager.saveProfile(updated, user.uid)
+                } catch (e: Exception) {
+                    // Ignore non-fatal sync error
+                }
+            }
+            isAuthLoading.value = false
+            needsProfileSetup.value = false
+            showToast("Profile completed! Welcome to Arkin, ${updated.name} 🎉")
+            navigateTo(AppScreen.DASHBOARD)
         }
     }
 

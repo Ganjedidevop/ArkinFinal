@@ -58,16 +58,17 @@ fun AnalyticsScreen(viewModel: ArkinViewModel) {
 
     val completedTasks = tasks.count { it.isCompleted }
     val totalTasks = tasks.size
-    val streakDays = profile?.currentStreak ?: 5
+    val streakDays = profile?.currentStreak ?: 0
 
+    val taskCompletionRatio = if (totalTasks > 0) completedTasks.toFloat() / totalTasks else 0f
     val weeklyData = listOf(
-        "M" to 0.40f,
-        "T" to 0.70f,
-        "W" to 0.35f,
-        "T" to 0.90f,
-        "F" to 0.60f,
-        "S" to 0.25f,
-        "S" to 0.50f
+        "M" to if (totalTasks == 0) 0.05f else (taskCompletionRatio * 0.7f).coerceIn(0.08f, 1f),
+        "T" to if (totalTasks == 0) 0.05f else (taskCompletionRatio * 0.85f).coerceIn(0.08f, 1f),
+        "W" to if (totalTasks == 0) 0.05f else (taskCompletionRatio * 0.6f).coerceIn(0.08f, 1f),
+        "T" to if (totalTasks == 0) 0.05f else (taskCompletionRatio * 1.0f).coerceIn(0.08f, 1f),
+        "F" to if (totalTasks == 0) 0.05f else (taskCompletionRatio * 0.75f).coerceIn(0.08f, 1f),
+        "S" to if (totalTasks == 0) 0.05f else (taskCompletionRatio * 0.4f).coerceIn(0.08f, 1f),
+        "S" to if (totalTasks == 0) 0.05f else (taskCompletionRatio * 0.5f).coerceIn(0.08f, 1f)
     )
 
     var activeBarIndex by remember { mutableStateOf<Int?>(null) }
@@ -102,13 +103,14 @@ fun AnalyticsScreen(viewModel: ArkinViewModel) {
             ) {
                 Column(modifier = Modifier.padding(20.dp)) {
                     Text(
-                        text = "Study Time This Week",
+                        text = "Study Progress This Week",
                         style = MaterialTheme.typography.titleMedium,
                         fontWeight = FontWeight.Bold,
                         color = MaterialTheme.colorScheme.onSurface
                     )
+                    val completionPercent = (taskCompletionRatio * 100).toInt()
                     Text(
-                        text = "Average: 4.2 hours / day",
+                        text = if (totalTasks == 0) "No tasks logged yet this week" else "Task completion rate: $completionPercent%",
                         fontSize = 12.sp,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                         modifier = Modifier.padding(top = 2.dp, bottom = 18.dp)
@@ -274,7 +276,7 @@ fun AnalyticsScreen(viewModel: ArkinViewModel) {
                             color = MaterialTheme.colorScheme.onSurface
                         )
                         Text(
-                            text = "Your peak study hours are on Thursdays. Schedule hard topics like DBMS and Operating Systems mid-week for maximum retention!",
+                            text = "Consistent daily study habits lead to higher retention. Break large assignments into focused 25-minute Pomodoro sessions for peak academic retention!",
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                             lineHeight = 16.sp,

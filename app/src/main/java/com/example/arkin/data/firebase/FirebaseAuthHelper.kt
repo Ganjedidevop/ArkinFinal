@@ -1,6 +1,8 @@
 package com.example.arkin.data.firebase
 
+import android.app.Activity
 import android.content.Context
+import android.content.ContextWrapper
 import androidx.credentials.CredentialManager
 import androidx.credentials.CustomCredential
 import androidx.credentials.GetCredentialRequest
@@ -100,6 +102,15 @@ object FirebaseAuthHelper {
         }
     }
 
+    private fun Context.findActivity(): Activity? {
+        var ctx = this
+        while (ctx is ContextWrapper) {
+            if (ctx is Activity) return ctx
+            ctx = ctx.baseContext
+        }
+        return null
+    }
+
     /**
      * Sign in with Google using Android Credential Manager and Firebase Auth.
      */
@@ -126,7 +137,8 @@ object FirebaseAuthHelper {
         }
 
         return try {
-            val credentialManager = CredentialManager.create(context)
+            val targetContext = context.findActivity() ?: context
+            val credentialManager = CredentialManager.create(targetContext)
 
             val googleIdOption = GetGoogleIdOption.Builder()
                 .setFilterByAuthorizedAccounts(false)
@@ -139,7 +151,7 @@ object FirebaseAuthHelper {
                 .build()
 
             val response = credentialManager.getCredential(
-                context = context,
+                context = targetContext,
                 request = request
             )
 
@@ -163,7 +175,7 @@ object FirebaseAuthHelper {
             Result.failure(
                 IllegalStateException(
                     "Google Sign-In failed: ${e.message}. " +
-                            "Make sure Google Sign-In is enabled in Firebase Console (arkin-22b82) and the SHA-1 fingerprint matches."
+                            "Make sure Google Sign-In is enabled in Firebase Console (arkin-64543) and the SHA-1 fingerprint matches."
                 )
             )
         } catch (e: Exception) {

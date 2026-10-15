@@ -41,12 +41,24 @@ import com.example.arkin.ui.screens.RemindersScreen
 import com.example.arkin.ui.screens.SplashScreen
 import com.example.arkin.ui.screens.TimetableScreen
 import com.example.arkin.ui.screens.TodoScreen
+import android.Manifest
+import android.content.pm.PackageManager
+import android.os.Build
+import androidx.activity.result.contract.ActivityResultContracts
+import androidx.core.content.ContextCompat
+import com.example.arkin.util.NotificationHelper
 import com.example.arkin.viewmodel.ArkinViewModel
 import com.example.ui.theme.MyApplicationTheme
 
 class MainActivity : ComponentActivity() {
+    private val notificationPermissionLauncher = registerForActivityResult(
+        ActivityResultContracts.RequestPermission()
+    ) { _ -> }
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        NotificationHelper.createNotificationChannels(this)
+        requestNotificationPermission()
         enableEdgeToEdge()
         setContent {
             val viewModel: ArkinViewModel = viewModel()
@@ -55,6 +67,14 @@ class MainActivity : ComponentActivity() {
 
             MyApplicationTheme(darkTheme = isDarkMode) {
                 MainAppContent(viewModel = viewModel)
+            }
+        }
+    }
+
+    private fun requestNotificationPermission() {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            if (ContextCompat.checkSelfPermission(this, Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED) {
+                notificationPermissionLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
             }
         }
     }

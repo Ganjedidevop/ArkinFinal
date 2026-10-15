@@ -8,6 +8,8 @@ plugins {
   alias(libs.plugins.google.services)
 }
 
+layout.buildDirectory.set(file("C:/Users/rohan/.gradle-builds/ArkinFinal/app"))
+
 android {
   namespace = "com.example"
   compileSdk { version = release(36) { minorApiLevel = 1 } }
@@ -62,6 +64,7 @@ secrets {
   propertiesFileName = ".env"
   defaultPropertiesFileName = ".env.example"
   ignoreList.add("FIREBASE_APPCHECK_DEBUG_TOKEN")
+  ignoreList.add("GOOGLE_WEB_CLIENT_ID")
 }
 
 googleServices { missingGoogleServicesStrategy = MissingGoogleServicesStrategy.WARN }

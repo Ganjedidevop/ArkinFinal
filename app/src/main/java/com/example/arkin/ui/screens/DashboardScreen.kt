@@ -25,7 +25,6 @@ import androidx.compose.material.icons.filled.Assignment
 import androidx.compose.material.icons.filled.CalendarMonth
 import androidx.compose.material.icons.filled.FormatListBulleted
 import androidx.compose.material.icons.filled.Menu
-import androidx.compose.material.icons.filled.Mic
 import androidx.compose.material.icons.filled.Notifications
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.rounded.BarChart
@@ -33,6 +32,7 @@ import androidx.compose.material.icons.rounded.Book
 import androidx.compose.material.icons.rounded.CalendarToday
 import androidx.compose.material.icons.rounded.Checklist
 import androidx.compose.material.icons.rounded.Description
+import androidx.compose.material.icons.rounded.EditNote
 import androidx.compose.material.icons.rounded.Lock
 import androidx.compose.material.icons.rounded.NotificationsActive
 import androidx.compose.material.icons.rounded.Psychology
@@ -92,7 +92,7 @@ fun DashboardScreen(viewModel: ArkinViewModel) {
     val pendingTasksCount = tasks.count { !it.isCompleted }
 
     val currentDateText = "Today, " + SimpleDateFormat("MMM d", Locale.getDefault()).format(Date())
-    val studentFirstName = profile?.name?.split(" ")?.firstOrNull() ?: "Student"
+    val studentFirstName = profile?.name?.trim()?.split(" ")?.firstOrNull()?.ifBlank { "Student" } ?: "Student"
 
     val scrollState = rememberScrollState()
 
@@ -360,9 +360,9 @@ fun DashboardScreen(viewModel: ArkinViewModel) {
                     onClick = { viewModel.navigateTo(AppScreen.REMINDERS) }
                 )
                 QuickAccessButton(
-                    title = "Voice Text",
-                    subtitle = "Dictate note",
-                    icon = Icons.Default.Mic,
+                    title = "Quick Note",
+                    subtitle = "Capture ideas",
+                    icon = Icons.Rounded.EditNote,
                     bgColor = AccentPurpleBg,
                     iconColor = AccentPurpleText,
                     onClick = { viewModel.openAddNoteDialog(isSecure = false) }

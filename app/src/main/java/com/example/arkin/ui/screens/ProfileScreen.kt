@@ -30,6 +30,7 @@ import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.School
 import com.example.arkin.model.AppScreen
+import com.example.arkin.ui.components.SecurePinChangeDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
@@ -77,8 +78,8 @@ fun ProfileScreen(viewModel: ArkinViewModel) {
     var isEditProfileDialogOpen by remember { mutableStateOf(false) }
     var isChangePinDialogOpen by remember { mutableStateOf(false) }
 
-    val name = profile?.name ?: "Rohan Sharma"
-    val major = profile?.major ?: "Computer Science, 2nd Year"
+    val name = profile?.name?.ifBlank { "Student" } ?: "Student"
+    val major = profile?.major?.ifBlank { "Academic Scholar" } ?: "Academic Scholar"
     val isDark = profile?.isDarkMode ?: false
 
     val scrollState = rememberScrollState()
@@ -211,7 +212,7 @@ fun ProfileScreen(viewModel: ArkinViewModel) {
                             }
                         }
                         Text(
-                            text = if (firebaseUser != null) "${firebaseUser?.email ?: firebaseUser?.uid} • arkin-22b82" else "arkin-22b82 • Firestore Active",
+                            text = if (firebaseUser != null) "${firebaseUser?.email ?: firebaseUser?.uid} • arkin-64543" else "arkin-64543 • Firestore Active",
                             fontSize = 11.sp,
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
@@ -303,14 +304,7 @@ fun ProfileScreen(viewModel: ArkinViewModel) {
                         )
                     }
 
-                    // Reset Demo Data
-                    SettingsRow(
-                        title = "Reload Sample Data",
-                        icon = Icons.Default.Refresh,
-                        bgColor = AccentOrangeBg,
-                        iconColor = AccentOrangeText,
-                        onClick = { viewModel.resetToDemoData() }
-                    )
+
 
                     // Logout
                     SettingsRow(
@@ -327,7 +321,7 @@ fun ProfileScreen(viewModel: ArkinViewModel) {
             Spacer(modifier = Modifier.height(28.dp))
 
             Text(
-                text = "Arkin v1.0 • Powered by Firebase (arkin-22b82) & Gemini AI",
+                text = "Arkin v1.0 • Powered by Firebase (arkin-64543) & Gemini AI",
                 fontSize = 11.sp,
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )
@@ -340,11 +334,11 @@ fun ProfileScreen(viewModel: ArkinViewModel) {
         EditProfileDialog(
             currentName = name,
             currentMajor = major,
-            currentEmail = profile?.email ?: "rohan.sharma@campus.edu",
-            currentCollege = profile?.collegeName ?: "School of Engineering & Technology",
-            currentCourse = profile?.course ?: "B.Tech Computer Science & Engineering",
-            currentSemester = profile?.semester ?: "Semester 4",
-            currentAcademicYear = profile?.academicYear ?: "2025-2026",
+            currentEmail = profile?.email ?: "",
+            currentCollege = profile?.collegeName ?: "",
+            currentCourse = profile?.course ?: "",
+            currentSemester = profile?.semester ?: "",
+            currentAcademicYear = profile?.academicYear ?: "",
             onDismiss = { isEditProfileDialogOpen = false },
             onSave = { newName, newMajor, newEmail, newCollege, newCourse, newSem, newYear ->
                 viewModel.updateProfile(newName, newMajor, newEmail, newCollege, newCourse, newSem, newYear)
@@ -354,10 +348,9 @@ fun ProfileScreen(viewModel: ArkinViewModel) {
     }
 
     if (isChangePinDialogOpen) {
-        ChangePinDialog(
-            currentPin = profile?.lockerPin ?: "1234",
+        SecurePinChangeDialog(
             onDismiss = { isChangePinDialogOpen = false },
-            onSave = { newPin ->
+            onPinSuccessfullyChanged = { newPin ->
                 viewModel.changeLockerPin(newPin)
                 isChangePinDialogOpen = false
             }
@@ -558,82 +551,6 @@ private fun EditProfileDialog(
                         colors = ButtonDefaults.buttonColors(containerColor = ArkinPrimary)
                     ) {
                         Text("Save Changes", fontWeight = FontWeight.Bold)
-                    }
-                }
-            }
-        }
-    }
-}
-
-@Composable
-private fun ChangePinDialog(
-    currentPin: String,
-    onDismiss: () -> Unit,
-    onSave: (newPin: String) -> Unit
-) {
-    var newPin by remember { mutableStateOf("") }
-
-    Dialog(onDismissRequest = onDismiss) {
-        Surface(
-            shape = RoundedCornerShape(26.dp),
-            color = MaterialTheme.colorScheme.surface,
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(16.dp)
-        ) {
-            Column(modifier = Modifier.padding(22.dp)) {
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Text(
-                        text = "Change Locker PIN 🔒",
-                        style = MaterialTheme.typography.titleLarge,
-                        fontWeight = FontWeight.Bold
-                    )
-                    IconButton(onClick = onDismiss) {
-                        Icon(Icons.Default.Close, contentDescription = "Close")
-                    }
-                }
-
-                Spacer(modifier = Modifier.height(14.dp))
-
-                Text(
-                    text = "Current PIN: $currentPin. Enter a new 4-digit numeric passcode to secure your private notes.",
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    modifier = Modifier.padding(bottom = 14.dp)
-                )
-
-                OutlinedTextField(
-                    value = newPin,
-                    onValueChange = { if (it.length <= 4 && it.all { ch -> ch.isDigit() }) newPin = it },
-                    label = { Text("New 4-Digit PIN") },
-                    placeholder = { Text("e.g. 5678") },
-                    singleLine = true,
-                    shape = RoundedCornerShape(16.dp),
-                    colors = OutlinedTextFieldDefaults.colors(focusedBorderColor = ArkinPrimary),
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(bottom = 18.dp)
-                )
-
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.End
-                ) {
-                    Button(
-                        onClick = {
-                            if (newPin.length == 4) {
-                                onSave(newPin)
-                            }
-                        },
-                        enabled = newPin.length == 4,
-                        shape = RoundedCornerShape(16.dp),
-                        colors = ButtonDefaults.buttonColors(containerColor = ArkinPrimary)
-                    ) {
-                        Text("Update PIN", fontWeight = FontWeight.Bold)
                     }
                 }
             }

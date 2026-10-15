@@ -19,7 +19,6 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Close
-import androidx.compose.material.icons.filled.Mic
 import androidx.compose.material.icons.rounded.AutoAwesome
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
@@ -65,7 +64,6 @@ fun NoteDialog(
     var selectedColor by remember { mutableStateOf(note?.colorKey ?: if (isSecureMode) "locker" else "purple") }
     var isAiEnhancing by remember { mutableStateOf(false) }
     var isAiSummarizing by remember { mutableStateOf(false) }
-    var isRecordingVoice by remember { mutableStateOf(false) }
 
     val coroutineScope = rememberCoroutineScope()
     val tags = if (isSecureMode) listOf("Secret", "Credentials", "Exam Keys") else listOf("Study", "Personal", "Project", "Exam")
@@ -149,46 +147,10 @@ fun NoteDialog(
 
                 Spacer(modifier = Modifier.height(12.dp))
 
-                // AI & Voice Tools Row
+                // AI Study Assistant Tool Row
                 Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    modifier = Modifier.fillMaxWidth()
                 ) {
-                    // Voice Dictate Button
-                    Surface(
-                        onClick = {
-                            isRecordingVoice = !isRecordingVoice
-                            if (isRecordingVoice) {
-                                val timestamp = java.text.SimpleDateFormat("HH:mm", java.util.Locale.getDefault()).format(java.util.Date())
-                                content = if (content.isBlank()) "[🎙️ Lecture Dictation at $timestamp] " else "$content\n[🎙️ Dictation $timestamp] "
-                            }
-                        },
-                        shape = RoundedCornerShape(12.dp),
-                        color = if (isRecordingVoice) Color(0xFFFEE2E2) else Color(0xFFEFF6FF),
-                        modifier = Modifier
-                            .weight(1f)
-                            .testTag("note_voice_dictate_button")
-                    ) {
-                        Row(
-                            modifier = Modifier.padding(vertical = 8.dp, horizontal = 10.dp),
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.Center
-                        ) {
-                            Icon(
-                                imageVector = Icons.Default.Mic,
-                                contentDescription = "Voice Dictate",
-                                tint = if (isRecordingVoice) Color(0xFFDC2626) else Color(0xFF2563EB),
-                                modifier = Modifier.size(15.dp)
-                            )
-                            Spacer(modifier = Modifier.width(6.dp))
-                            Text(
-                                text = if (isRecordingVoice) "Listening..." else "Voice Note",
-                                fontSize = 11.sp,
-                                fontWeight = FontWeight.Bold,
-                                color = if (isRecordingVoice) Color(0xFFDC2626) else Color(0xFF2563EB)
-                            )
-                        }
-                    }
 
                     // AI Summarize Button (gemini-1.5-flash study summarizer)
                     Surface(
