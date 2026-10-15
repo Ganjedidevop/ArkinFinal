@@ -1,5 +1,8 @@
 package com.example.arkin.ui.screens
 
+import android.net.Uri
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
@@ -20,11 +23,14 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Assignment
 import androidx.compose.material.icons.filled.AutoAwesome
+import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.CloudUpload
 import androidx.compose.material.icons.filled.ContentCopy
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Description
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.InsertDriveFile
+import androidx.compose.material.icons.filled.OpenInNew
 import androidx.compose.material.icons.filled.Save
 import androidx.compose.material.icons.filled.Schedule
 import androidx.compose.material3.Button
@@ -51,12 +57,16 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalClipboardManager
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.arkin.ui.components.AppHeader
+import com.example.arkin.ui.components.MarkdownText
+import com.example.arkin.util.FileViewerHelper
 import com.example.arkin.viewmodel.ArkinViewModel
 import com.example.ui.theme.AccentOrangeBg
 import com.example.ui.theme.AccentOrangeText
@@ -67,6 +77,7 @@ import org.json.JSONArray
 
 @Composable
 fun AssignmentDetailScreen(viewModel: ArkinViewModel) {
+    val context = LocalContext.current
     val assignment by viewModel.selectedAssignment.collectAsState()
     val isAiLoading by viewModel.isAiLoading.collectAsState()
     val clipboardManager = LocalClipboardManager.current
@@ -84,7 +95,16 @@ fun AssignmentDetailScreen(viewModel: ArkinViewModel) {
     val hw = assignment!!
     var draftText by remember(hw.aiDraftAnswer) { mutableStateOf(hw.aiDraftAnswer ?: "") }
     var selectedStatus by remember(hw.status) { mutableStateOf(hw.status) }
+    var isPreviewMode by remember { mutableStateOf(false) }
     val scrollState = rememberScrollState()
+
+    val attachFilePicker = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.OpenDocument()
+    ) { uri: Uri? ->
+        if (uri != null) {
+            viewModel.attachFileToHomework(hw, uri)
+        }
+    }
 
     // Parse extracted questions if available
     val questionsList = remember(hw.extractedQuestionsJson) {
@@ -232,10 +252,10 @@ fun AssignmentDetailScreen(viewModel: ArkinViewModel) {
                 }
             }
 
-            // Attached College Question File (if any)
+            // Attached College Question File Section
             if (!hw.attachmentName.isNullOrBlank()) {
                 Surface(
-                    shape = RoundedCornerShape(16.dp),
+                    shape = RoundedCornerShape(18.dp),
                     color = MaterialTheme.colorScheme.surfaceVariant,
                     modifier = Modifier.fillMaxWidth()
                 ) {
@@ -255,15 +275,65 @@ fun AssignmentDetailScreen(viewModel: ArkinViewModel) {
                                 text = hw.attachmentName,
                                 fontSize = 13.sp,
                                 fontWeight = FontWeight.Bold,
-                                color = MaterialTheme.colorScheme.onSurface
+                                color = MaterialTheme.colorScheme.onSurface,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis
                             )
                             Text(
-                                text = "Original College Assignment Sheet",
+                                text = hw.attachmentSize ?: "Attached document",
                                 fontSize = 11.sp,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant
                             )
                         }
+
+                        // Open document button
+                        IconButton(
+                            onClick = {
+                                FileViewerHelper.openDocument(context, hw.attachmentUri, hw.attachmentName)
+                            },
+                            modifier = Modifier.size(32.dp)
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.OpenInNew,
+                                contentDescription = "Open Document",
+                                tint = ArkinPrimary,
+                                modifier = Modifier.size(18.dp)
+                            )
+                        }
+
+                        // Remove attachment button
+                        IconButton(
+                            onClick = { viewModel.removeHomeworkAttachment(hw) },
+                            modifier = Modifier.size(32.dp)
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.Close,
+                                contentDescription = "Remove Attachment",
+                                tint = Color(0xFFEF4444),
+                                modifier = Modifier.size(18.dp)
+                            )
+                        }
                     }
+                }
+            } else {
+                OutlinedButton(
+                    onClick = {
+                        attachFilePicker.launch(arrayOf("application/pdf", "image/*", "*/*"))
+                    },
+                    shape = RoundedCornerShape(16.dp),
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.CloudUpload,
+                        contentDescription = null,
+                        modifier = Modifier.size(16.dp)
+                    )
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Text(
+                        text = "Attach Assignment Document / PDF 📎",
+                        fontSize = 12.sp,
+                        fontWeight = FontWeight.SemiBold
+                    )
                 }
             }
 
@@ -343,7 +413,7 @@ fun AssignmentDetailScreen(viewModel: ArkinViewModel) {
                 }
             }
 
-            // AI-Generated Answer Draft Section (Editable & Clearly Labeled)
+            // AI-Generated Answer Draft Section (Editable & Rich Markdown Preview)
             Card(
                 shape = RoundedCornerShape(24.dp),
                 colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
@@ -372,11 +442,19 @@ fun AssignmentDetailScreen(viewModel: ArkinViewModel) {
                                 )
                             }
                             Spacer(modifier = Modifier.width(8.dp))
-                            Text(
-                                text = "(Editable Draft)",
-                                fontSize = 11.sp,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant
-                            )
+                            Surface(
+                                onClick = { isPreviewMode = !isPreviewMode },
+                                shape = RoundedCornerShape(8.dp),
+                                color = MaterialTheme.colorScheme.surfaceVariant
+                            ) {
+                                Text(
+                                    text = if (isPreviewMode) "Edit Mode ✏️" else "Preview Markdown 📖",
+                                    fontSize = 10.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    color = ArkinPrimary,
+                                    modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
+                                )
+                            }
                         }
 
                         if (isAiLoading) {
@@ -390,19 +468,34 @@ fun AssignmentDetailScreen(viewModel: ArkinViewModel) {
 
                     Spacer(modifier = Modifier.height(12.dp))
 
-                    OutlinedTextField(
-                        value = draftText,
-                        onValueChange = { draftText = it },
-                        placeholder = { Text("AI generated solution draft will appear here. You can edit, format, and add notes before submission.") },
-                        minLines = 8,
-                        maxLines = 16,
-                        shape = RoundedCornerShape(16.dp),
-                        colors = OutlinedTextFieldDefaults.colors(
-                            focusedBorderColor = ArkinPrimary,
-                            unfocusedBorderColor = MaterialTheme.colorScheme.outline
-                        ),
-                        modifier = Modifier.fillMaxWidth()
-                    )
+                    if (isPreviewMode) {
+                        Surface(
+                            shape = RoundedCornerShape(16.dp),
+                            color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f),
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Box(modifier = Modifier.padding(14.dp)) {
+                                MarkdownText(
+                                    markdown = draftText.ifBlank { "*No solution draft generated yet. Click 'Generate Step-by-Step AI Solution Draft' above.*" },
+                                    textColor = MaterialTheme.colorScheme.onSurface
+                                )
+                            }
+                        }
+                    } else {
+                        OutlinedTextField(
+                            value = draftText,
+                            onValueChange = { draftText = it },
+                            placeholder = { Text("AI generated solution draft will appear here. You can edit, format, and add notes before submission.") },
+                            minLines = 8,
+                            maxLines = 16,
+                            shape = RoundedCornerShape(16.dp),
+                            colors = OutlinedTextFieldDefaults.colors(
+                                focusedBorderColor = ArkinPrimary,
+                                unfocusedBorderColor = MaterialTheme.colorScheme.outline
+                            ),
+                            modifier = Modifier.fillMaxWidth()
+                        )
+                    }
 
                     Spacer(modifier = Modifier.height(14.dp))
 

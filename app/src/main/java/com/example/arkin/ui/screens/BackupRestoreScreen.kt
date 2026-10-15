@@ -188,31 +188,42 @@ fun BackupRestoreScreen(viewModel: ArkinViewModel) {
 
                     Spacer(modifier = Modifier.height(14.dp))
 
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.spacedBy(10.dp)
-                    ) {
+                    if (firebaseUser == null) {
                         Button(
-                            onClick = { viewModel.syncToFirestore() },
-                            enabled = !isFirestoreSyncing,
+                            onClick = { viewModel.navigateTo(com.example.arkin.model.AppScreen.AUTH) },
                             shape = RoundedCornerShape(16.dp),
                             colors = ButtonDefaults.buttonColors(containerColor = ArkinPrimary),
-                            modifier = Modifier.weight(1f)
+                            modifier = Modifier.fillMaxWidth()
                         ) {
-                            if (isFirestoreSyncing) {
-                                CircularProgressIndicator(color = Color.White, strokeWidth = 2.dp, modifier = Modifier.size(16.dp))
-                            } else {
-                                Text("Sync to Cloud ☁️", fontWeight = FontWeight.Bold, fontSize = 12.sp)
-                            }
+                            Text("Sign In to Connect Cloud 🔑", fontWeight = FontWeight.Bold, fontSize = 13.sp)
                         }
-
-                        OutlinedButton(
-                            onClick = { viewModel.syncFromFirestore() },
-                            enabled = !isFirestoreSyncing,
-                            shape = RoundedCornerShape(16.dp),
-                            modifier = Modifier.weight(1f)
+                    } else {
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.spacedBy(10.dp)
                         ) {
-                            Text("Restore Cloud 📥", fontWeight = FontWeight.Bold, fontSize = 12.sp)
+                            Button(
+                                onClick = { viewModel.syncToFirestore() },
+                                enabled = !isFirestoreSyncing,
+                                shape = RoundedCornerShape(16.dp),
+                                colors = ButtonDefaults.buttonColors(containerColor = ArkinPrimary),
+                                modifier = Modifier.weight(1f)
+                            ) {
+                                if (isFirestoreSyncing) {
+                                    CircularProgressIndicator(color = Color.White, strokeWidth = 2.dp, modifier = Modifier.size(16.dp))
+                                } else {
+                                    Text("Sync to Cloud ☁️", fontWeight = FontWeight.Bold, fontSize = 12.sp)
+                                }
+                            }
+
+                            OutlinedButton(
+                                onClick = { viewModel.syncFromFirestore() },
+                                enabled = !isFirestoreSyncing,
+                                shape = RoundedCornerShape(16.dp),
+                                modifier = Modifier.weight(1f)
+                            ) {
+                                Text("Restore Cloud 📥", fontWeight = FontWeight.Bold, fontSize = 12.sp)
+                            }
                         }
                     }
                 }

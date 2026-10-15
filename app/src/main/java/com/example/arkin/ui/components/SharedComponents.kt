@@ -439,6 +439,33 @@ fun NoteCard(
                 overflow = TextOverflow.Ellipsis,
                 lineHeight = 18.sp
             )
+
+            if (!note.attachmentName.isNullOrBlank()) {
+                val context = androidx.compose.ui.platform.LocalContext.current
+                Spacer(modifier = Modifier.height(8.dp))
+                Surface(
+                    onClick = {
+                        com.example.arkin.util.FileViewerHelper.openDocument(context, note.attachmentUri, note.attachmentName)
+                    },
+                    shape = RoundedCornerShape(8.dp),
+                    color = Color(0xFFF3E8FF)
+                ) {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
+                    ) {
+                        Text("📎 ", fontSize = 11.sp)
+                        Text(
+                            text = note.attachmentName ?: "Attachment",
+                            fontSize = 11.sp,
+                            fontWeight = FontWeight.SemiBold,
+                            color = ArkinPrimary,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis
+                        )
+                    }
+                }
+            }
         }
     }
 }

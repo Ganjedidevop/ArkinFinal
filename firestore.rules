@@ -1,0 +1,20 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // Student private user profile document
+    match /users/{userId} {
+      allow read, write: if request.auth != null && request.auth.uid == userId;
+    }
+
+    // Student private subcollections (notes, tasks, homework, timetable, exam_results, reminders, settings)
+    match /users/{userId}/{document=**} {
+      allow read, write: if request.auth != null && request.auth.uid == userId;
+    }
+
+    // Deny all unrestricted public access to other collections
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}

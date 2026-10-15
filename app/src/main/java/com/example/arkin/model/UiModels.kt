@@ -46,11 +46,26 @@ data class DayScheduleItem(
     val isToday: Boolean = false
 )
 
+enum class DocProcessingState {
+    IDLE,
+    SELECTING,
+    READING_DOCUMENT,
+    EXTRACTING_TEXT,
+    ANALYZING_AI,
+    REVIEWING,
+    SAVING,
+    COMPLETED,
+    FAILED
+}
+
 data class ParsedTimetableClass(
     val day: String,
     val subject: String,
     val timeSlot: String,
     val room: String,
     val faculty: String = "",
-    val colorKey: String = "purple"
+    val colorKey: String = "purple",
+    val startTime: String = "",
+    val endTime: String = "",
+    val isLab: Boolean = false
 )
