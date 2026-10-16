@@ -227,6 +227,19 @@ object VaultSecurityManager {
     // PIN Security & Salted Hash Storage
     // ==========================================
 
+    private const val PREF_SECURITY_QUESTION = "vault_security_question"
+    private const val PREF_SECURITY_ANSWER_HASH = "vault_security_answer_hash"
+    private const val PREF_SECURITY_ANSWER_SALT = "vault_security_answer_salt"
+    private const val PREF_RECOVERY_EMAIL = "vault_recovery_email"
+
+    val DEFAULT_SECURITY_QUESTIONS = listOf(
+        "What is your childhood pet's name?",
+        "What was the name of your first school?",
+        "What is your favorite academic subject?",
+        "What city were you born in?",
+        "What is your mother's maiden name?"
+    )
+
     private fun getPrefs(context: Context) =
         context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
 
@@ -305,6 +318,73 @@ object VaultSecurityManager {
         }
         val success = setPin(context, newPin)
         return if (success) Result.success(Unit) else Result.failure(Exception("Failed to save new PIN."))
+    }
+
+    // ==========================================
+    // Vault PIN Recovery via Question or Email
+    // ==========================================
+
+    fun setRecoveryDetails(
+        context: Context,
+        question: String,
+        answer: String,
+        recoveryEmail: String? = null
+    ): Boolean {
+        if (question.isBlank() || answer.isBlank()) return false
+        val cleanAnswer = answer.trim().lowercase()
+
+        val saltBytes = ByteArray(16)
+        SecureRandom().nextBytes(saltBytes)
+        val hexSalt = bytesToHex(saltBytes)
+        val hash = hashPin(cleanAnswer, hexSalt)
+
+        val editor = getPrefs(context).edit()
+            .putString(PREF_SECURITY_QUESTION, question.trim())
+            .putString(PREF_SECURITY_ANSWER_SALT, hexSalt)
+            .putString(PREF_SECURITY_ANSWER_HASH, hash)
+
+        if (!recoveryEmail.isNullOrBlank()) {
+            editor.putString(PREF_RECOVERY_EMAIL, recoveryEmail.trim().lowercase())
+        }
+        editor.apply()
+        return true
+    }
+
+    fun getSecurityQuestion(context: Context): String? {
+        return getPrefs(context).getString(PREF_SECURITY_QUESTION, null)?.ifBlank { null }
+    }
+
+    fun getRecoveryEmail(context: Context): String? {
+        return getPrefs(context).getString(PREF_RECOVERY_EMAIL, null)?.ifBlank { null }
+    }
+
+    fun hasRecoveryConfigured(context: Context): Boolean {
+        val prefs = getPrefs(context)
+        val hasQuestion = !prefs.getString(PREF_SECURITY_QUESTION, null).isNullOrBlank()
+        val hasEmail = !prefs.getString(PREF_RECOVERY_EMAIL, null).isNullOrBlank()
+        return hasQuestion || hasEmail
+    }
+
+    fun verifySecurityAnswer(context: Context, enteredAnswer: String): Boolean {
+        val prefs = getPrefs(context)
+        val storedHash = prefs.getString(PREF_SECURITY_ANSWER_HASH, null) ?: return false
+        val storedSalt = prefs.getString(PREF_SECURITY_ANSWER_SALT, null) ?: return false
+        val clean = enteredAnswer.trim().lowercase()
+        return hashPin(clean, storedSalt) == storedHash
+    }
+
+    fun verifyRecoveryEmail(context: Context, enteredEmail: String, fallbackProfileEmail: String? = null): Boolean {
+        val cleanEntered = enteredEmail.trim().lowercase()
+        if (cleanEntered.isBlank()) return false
+        val stored = getRecoveryEmail(context)
+        if (!stored.isNullOrBlank() && stored == cleanEntered) return true
+        if (!fallbackProfileEmail.isNullOrBlank() && fallbackProfileEmail.trim().lowercase() == cleanEntered) return true
+        return false
+    }
+
+    fun resetPinWithRecovery(context: Context, newPin: String): Boolean {
+        if (newPin.length != 4 || !newPin.all { it.isDigit() }) return false
+        return setPin(context, newPin)
     }
 
     private fun hashPin(pin: String, hexSalt: String): String {

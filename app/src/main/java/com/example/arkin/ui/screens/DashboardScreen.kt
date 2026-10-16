@@ -79,6 +79,11 @@ import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
 
+import androidx.compose.foundation.isSystemInDarkTheme
+import androidx.compose.material.icons.automirrored.filled.Assignment
+import com.example.ui.theme.ArkinBackgroundDark
+import com.example.ui.theme.ArkinPrimaryLight
+
 @Composable
 fun DashboardScreen(viewModel: ArkinViewModel) {
     val profile by viewModel.studentProfile.collectAsState()
@@ -86,14 +91,17 @@ fun DashboardScreen(viewModel: ArkinViewModel) {
     val notes by viewModel.filteredPublicNotes.collectAsState()
     val homework by viewModel.allHomework.collectAsState()
     val timetable by viewModel.classesForDay.collectAsState()
+    val reminders by viewModel.allReminders.collectAsState()
 
     val completedTasksCount = tasks.count { it.isCompleted }
     val totalTasksCount = tasks.size
     val pendingTasksCount = tasks.count { !it.isCompleted }
+    val uncompletedRemindersCount = reminders.count { !it.isCompleted }
 
     val currentDateText = "Today, " + SimpleDateFormat("MMM d", Locale.getDefault()).format(Date())
     val studentFirstName = profile?.name?.trim()?.split(" ")?.firstOrNull()?.ifBlank { "Student" } ?: "Student"
 
+    val isDark = isSystemInDarkTheme() || MaterialTheme.colorScheme.background == ArkinBackgroundDark
     val scrollState = rememberScrollState()
 
     Column(
@@ -149,14 +157,16 @@ fun DashboardScreen(viewModel: ArkinViewModel) {
                             tint = MaterialTheme.colorScheme.onSurface
                         )
                     }
-                    Box(
-                        modifier = Modifier
-                            .padding(top = 8.dp, end = 8.dp)
-                            .size(9.dp)
-                            .clip(CircleShape)
-                            .background(Color(0xFFEF4444))
-                            .border(1.5.dp, MaterialTheme.colorScheme.background, CircleShape)
-                    )
+                    if (uncompletedRemindersCount > 0) {
+                        Box(
+                            modifier = Modifier
+                                .padding(top = 8.dp, end = 8.dp)
+                                .size(9.dp)
+                                .clip(CircleShape)
+                                .background(Color(0xFFEF4444))
+                                .border(1.5.dp, MaterialTheme.colorScheme.background, CircleShape)
+                        )
+                    }
                 }
 
                 // Student Avatar
@@ -206,10 +216,14 @@ fun DashboardScreen(viewModel: ArkinViewModel) {
         Spacer(modifier = Modifier.height(16.dp))
 
         // AI File & Timetable Upload Card
+        val aiCardBg = if (isDark) MaterialTheme.colorScheme.surfaceVariant else Color(0xFFF3E8FF)
+        val aiIconBg = if (isDark) MaterialTheme.colorScheme.surface else Color.White
+        val aiIconTint = if (isDark) ArkinPrimaryLight else Color(0xFF9333EA)
+
         Surface(
             onClick = { viewModel.navigateTo(AppScreen.AI_DOC_ORGANIZER) },
             shape = RoundedCornerShape(22.dp),
-            color = Color(0xFFF3E8FF),
+            color = aiCardBg,
             shadowElevation = 2.dp,
             modifier = Modifier
                 .fillMaxWidth()
@@ -221,14 +235,14 @@ fun DashboardScreen(viewModel: ArkinViewModel) {
             ) {
                 Surface(
                     shape = CircleShape,
-                    color = Color.White,
+                    color = aiIconBg,
                     modifier = Modifier.size(44.dp)
                 ) {
                     Box(contentAlignment = Alignment.Center) {
                         Icon(
-                            imageVector = Icons.Default.Assignment,
+                            imageVector = Icons.AutoMirrored.Filled.Assignment,
                             contentDescription = "Upload Document",
-                            tint = Color(0xFF9333EA),
+                            tint = aiIconTint,
                             modifier = Modifier.size(24.dp)
                         )
                     }
@@ -302,6 +316,7 @@ fun DashboardScreen(viewModel: ArkinViewModel) {
                     icon = Icons.Rounded.Description,
                     bgColor = AccentPurpleBg,
                     iconColor = AccentPurpleText,
+                    modifier = Modifier.weight(1f),
                     onClick = { viewModel.navigateTo(AppScreen.NOTES) }
                 )
                 QuickAccessButton(
@@ -310,6 +325,7 @@ fun DashboardScreen(viewModel: ArkinViewModel) {
                     icon = Icons.Rounded.Checklist,
                     bgColor = AccentTealBg,
                     iconColor = AccentTealText,
+                    modifier = Modifier.weight(1f),
                     onClick = { viewModel.navigateTo(AppScreen.TODO) }
                 )
                 QuickAccessButton(
@@ -318,6 +334,7 @@ fun DashboardScreen(viewModel: ArkinViewModel) {
                     icon = Icons.Rounded.Book,
                     bgColor = AccentOrangeBg,
                     iconColor = AccentOrangeText,
+                    modifier = Modifier.weight(1f),
                     onClick = { viewModel.navigateTo(AppScreen.HOMEWORK) }
                 )
                 QuickAccessButton(
@@ -326,6 +343,7 @@ fun DashboardScreen(viewModel: ArkinViewModel) {
                     icon = Icons.Rounded.CalendarToday,
                     bgColor = AccentBlueBg,
                     iconColor = AccentBlueText,
+                    modifier = Modifier.weight(1f),
                     onClick = { viewModel.navigateTo(AppScreen.TIMETABLE) }
                 )
             }
@@ -340,7 +358,8 @@ fun DashboardScreen(viewModel: ArkinViewModel) {
                     icon = Icons.Rounded.Psychology,
                     bgColor = AccentPinkBg,
                     iconColor = AccentPinkText,
-                    hasBadge = true,
+                    modifier = Modifier.weight(1f),
+                    hasBadge = false,
                     onClick = { viewModel.navigateTo(AppScreen.AI_ASSISTANT) }
                 )
                 QuickAccessButton(
@@ -349,6 +368,7 @@ fun DashboardScreen(viewModel: ArkinViewModel) {
                     icon = Icons.Rounded.Lock,
                     bgColor = AccentLockerBg,
                     iconColor = AccentLockerText,
+                    modifier = Modifier.weight(1f),
                     onClick = { viewModel.navigateTo(AppScreen.LOCKER) }
                 )
                 QuickAccessButton(
@@ -357,6 +377,7 @@ fun DashboardScreen(viewModel: ArkinViewModel) {
                     icon = Icons.Rounded.NotificationsActive,
                     bgColor = AccentYellowBg,
                     iconColor = AccentYellowText,
+                    modifier = Modifier.weight(1f),
                     onClick = { viewModel.navigateTo(AppScreen.REMINDERS) }
                 )
                 QuickAccessButton(
@@ -365,6 +386,7 @@ fun DashboardScreen(viewModel: ArkinViewModel) {
                     icon = Icons.Rounded.EditNote,
                     bgColor = AccentPurpleBg,
                     iconColor = AccentPurpleText,
+                    modifier = Modifier.weight(1f),
                     onClick = { viewModel.openAddNoteDialog(isSecure = false) }
                 )
             }

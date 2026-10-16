@@ -52,6 +52,7 @@ private enum class PinFlowStep {
     VERIFY_CURRENT,
     ENTER_NEW,
     CONFIRM_NEW,
+    SET_RECOVERY,
     SUCCESS
 }
 
@@ -70,6 +71,9 @@ fun SecurePinChangeDialog(
     var currentPinInput by remember { mutableStateOf("") }
     var newPinInput by remember { mutableStateOf("") }
     var confirmPinInput by remember { mutableStateOf("") }
+    var selectedQuestion by remember { mutableStateOf(VaultSecurityManager.DEFAULT_SECURITY_QUESTIONS[0]) }
+    var securityAnswerInput by remember { mutableStateOf("") }
+    var recoveryEmailInput by remember { mutableStateOf("") }
     var errorMessage by remember { mutableStateOf<String?>(null) }
 
     Dialog(onDismissRequest = onDismiss) {
@@ -324,26 +328,149 @@ fun SecurePinChangeDialog(
 
                             Button(
                                 onClick = {
-                                    // Step 11: Verify match
                                     if (confirmPinInput != newPinInput) {
                                         errorMessage = "PINs do not match. Please re-enter."
                                         confirmPinInput = ""
                                         return@Button
                                     }
-                                    // Step 12: Save securely
-                                    val success = VaultSecurityManager.setPin(context, newPinInput)
-                                    if (success) {
-                                        onPinSuccessfullyChanged(newPinInput)
-                                        currentStep = PinFlowStep.SUCCESS
-                                    } else {
-                                        errorMessage = "Failed to save new PIN. Please try again."
-                                    }
+                                    errorMessage = null
+                                    currentStep = PinFlowStep.SET_RECOVERY
                                 },
                                 enabled = confirmPinInput.length == 4,
                                 shape = RoundedCornerShape(16.dp),
                                 colors = ButtonDefaults.buttonColors(containerColor = ArkinPrimary)
                             ) {
-                                Text("Save PIN 🔒", fontWeight = FontWeight.Bold)
+                                Text("Next: Set Recovery →", fontWeight = FontWeight.Bold)
+                            }
+                        }
+                    }
+
+                    PinFlowStep.SET_RECOVERY -> {
+                        Text(
+                            text = "Set Recovery Question & Email 🛡️",
+                            fontSize = 12.sp,
+                            fontWeight = FontWeight.SemiBold,
+                            color = ArkinPrimary
+                        )
+                        Text(
+                            text = "If you ever forget your PIN, this recovery question and email will let you reset your vault password without losing files.",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            modifier = Modifier.padding(top = 4.dp, bottom = 12.dp)
+                        )
+
+                        Text(
+                            text = "Security Question:",
+                            fontSize = 11.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = MaterialTheme.colorScheme.onSurface
+                        )
+
+                        Column(
+                            verticalArrangement = Arrangement.spacedBy(6.dp),
+                            modifier = Modifier.padding(vertical = 6.dp)
+                        ) {
+                            VaultSecurityManager.DEFAULT_SECURITY_QUESTIONS.take(3).forEach { q ->
+                                val isSelected = selectedQuestion == q
+                                Surface(
+                                    onClick = { selectedQuestion = q },
+                                    shape = RoundedCornerShape(10.dp),
+                                    color = if (isSelected) ArkinPrimary.copy(alpha = 0.15f) else MaterialTheme.colorScheme.surfaceVariant,
+                                    modifier = Modifier.fillMaxWidth()
+                                ) {
+                                    Text(
+                                        text = q,
+                                        fontSize = 11.sp,
+                                        fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal,
+                                        color = if (isSelected) ArkinPrimary else MaterialTheme.colorScheme.onSurface,
+                                        modifier = Modifier.padding(horizontal = 10.dp, vertical = 7.dp)
+                                    )
+                                }
+                            }
+                        }
+
+                        OutlinedTextField(
+                            value = securityAnswerInput,
+                            onValueChange = {
+                                securityAnswerInput = it
+                                errorMessage = null
+                            },
+                            label = { Text("Your Secret Answer") },
+                            placeholder = { Text("e.g. MySecretAnswer") },
+                            singleLine = true,
+                            shape = RoundedCornerShape(14.dp),
+                            colors = OutlinedTextFieldDefaults.colors(focusedBorderColor = ArkinPrimary),
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(vertical = 4.dp)
+                        )
+
+                        OutlinedTextField(
+                            value = recoveryEmailInput,
+                            onValueChange = {
+                                recoveryEmailInput = it
+                                errorMessage = null
+                            },
+                            label = { Text("Recovery Email (Optional)") },
+                            placeholder = { Text("e.g. student@gmail.com") },
+                            singleLine = true,
+                            shape = RoundedCornerShape(14.dp),
+                            colors = OutlinedTextFieldDefaults.colors(focusedBorderColor = ArkinPrimary),
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(vertical = 4.dp)
+                        )
+
+                        Spacer(modifier = Modifier.height(14.dp))
+
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Button(
+                                onClick = {
+                                    val success = VaultSecurityManager.setPin(context, newPinInput)
+                                    if (success) {
+                                        onPinSuccessfullyChanged(newPinInput)
+                                        currentStep = PinFlowStep.SUCCESS
+                                    } else {
+                                        errorMessage = "Failed to save PIN."
+                                    }
+                                },
+                                shape = RoundedCornerShape(14.dp),
+                                colors = ButtonDefaults.buttonColors(
+                                    containerColor = MaterialTheme.colorScheme.surfaceVariant,
+                                    contentColor = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                            ) {
+                                Text("Skip", fontSize = 12.sp)
+                            }
+
+                            Button(
+                                onClick = {
+                                    if (securityAnswerInput.trim().isBlank()) {
+                                        errorMessage = "Please enter an answer to your recovery question."
+                                        return@Button
+                                    }
+                                    val pinSuccess = VaultSecurityManager.setPin(context, newPinInput)
+                                    if (pinSuccess) {
+                                        VaultSecurityManager.setRecoveryDetails(
+                                            context = context,
+                                            question = selectedQuestion,
+                                            answer = securityAnswerInput,
+                                            recoveryEmail = recoveryEmailInput.ifBlank { null }
+                                        )
+                                        onPinSuccessfullyChanged(newPinInput)
+                                        currentStep = PinFlowStep.SUCCESS
+                                    } else {
+                                        errorMessage = "Failed to save PIN. Please try again."
+                                    }
+                                },
+                                shape = RoundedCornerShape(14.dp),
+                                colors = ButtonDefaults.buttonColors(containerColor = ArkinPrimary)
+                            ) {
+                                Text("Save & Finish 🔒", fontWeight = FontWeight.Bold, fontSize = 13.sp)
                             }
                         }
                     }

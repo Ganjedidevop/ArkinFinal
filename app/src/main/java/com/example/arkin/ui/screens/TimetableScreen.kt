@@ -135,16 +135,23 @@ fun TimetableScreen(viewModel: ArkinViewModel) {
                             fontWeight = FontWeight.Medium,
                             color = if (isSelected) Color.White.copy(alpha = 0.85f) else MaterialTheme.colorScheme.onSurfaceVariant
                         )
-                        Spacer(modifier = Modifier.height(2.dp))
+                        val dayNumber = remember(day) {
+                            val cal = java.util.Calendar.getInstance()
+                            cal.firstDayOfWeek = java.util.Calendar.MONDAY
+                            val targetDayOfWeek = when (day) {
+                                "Mon" -> java.util.Calendar.MONDAY
+                                "Tue" -> java.util.Calendar.TUESDAY
+                                "Wed" -> java.util.Calendar.WEDNESDAY
+                                "Thu" -> java.util.Calendar.THURSDAY
+                                "Fri" -> java.util.Calendar.FRIDAY
+                                "Sat" -> java.util.Calendar.SATURDAY
+                                else -> java.util.Calendar.SUNDAY
+                            }
+                            cal.set(java.util.Calendar.DAY_OF_WEEK, targetDayOfWeek)
+                            cal.get(java.util.Calendar.DAY_OF_MONTH).toString()
+                        }
                         Text(
-                            text = when (day) {
-                                "Mon" -> "27"
-                                "Tue" -> "28"
-                                "Wed" -> "29"
-                                "Thu" -> "30"
-                                "Fri" -> "31"
-                                else -> "1"
-                            },
+                            text = dayNumber,
                             fontSize = 16.sp,
                             fontWeight = FontWeight.Bold,
                             color = if (isSelected) Color.White else MaterialTheme.colorScheme.onSurface

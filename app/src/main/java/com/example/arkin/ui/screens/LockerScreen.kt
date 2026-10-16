@@ -32,10 +32,10 @@ import androidx.compose.material.icons.filled.DeleteOutline
 import androidx.compose.material.icons.filled.Description
 import androidx.compose.material.icons.filled.Image
 import androidx.compose.material.icons.filled.Lock
-import androidx.compose.material.icons.filled.LockOpen
-import androidx.compose.material.icons.filled.Note
-import androidx.compose.material.icons.filled.OpenInNew
-import androidx.compose.material.icons.filled.Password
+import androidx.compose.material.icons.automirrored.filled.Note
+import androidx.compose.material.icons.automirrored.filled.OpenInNew
+import androidx.compose.material.icons.rounded.Key
+import androidx.compose.material.icons.rounded.CheckCircle
 import androidx.compose.material.icons.rounded.Shield
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
@@ -50,6 +50,7 @@ import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
+import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
@@ -87,7 +88,9 @@ fun LockerScreen(viewModel: ArkinViewModel) {
     val allVaultItems by viewModel.allVaultItems.collectAsState()
     val context = LocalContext.current
 
+    val profile by viewModel.studentProfile.collectAsState()
     var isChangePinDialogOpen by remember { mutableStateOf(false) }
+    var isRecoveryDialogOpen by remember { mutableStateOf(false) }
 
     Column(
         modifier = Modifier
@@ -105,7 +108,7 @@ fun LockerScreen(viewModel: ArkinViewModel) {
                         modifier = Modifier.testTag("locker_change_pin_button")
                     ) {
                         Icon(
-                            imageVector = Icons.Default.Password,
+                            imageVector = Icons.Rounded.Key,
                             contentDescription = "Change PIN",
                             tint = AccentLockerText
                         )
@@ -130,7 +133,8 @@ fun LockerScreen(viewModel: ArkinViewModel) {
                 isPinError = isPinError,
                 onDigit = { viewModel.onPinDigit(it) },
                 onClear = { viewModel.onPinClear() },
-                onBackspace = { viewModel.onPinBackspace() }
+                onBackspace = { viewModel.onPinBackspace() },
+                onForgotPinClick = { isRecoveryDialogOpen = true }
             )
         } else {
             VaultUnlockedView(
@@ -150,6 +154,20 @@ fun LockerScreen(viewModel: ArkinViewModel) {
             }
         )
     }
+
+    if (isRecoveryDialogOpen) {
+        VaultRecoveryDialog(
+            context = context,
+            profileEmail = profile?.email,
+            onDismiss = { isRecoveryDialogOpen = false },
+            onPinReset = { newPin ->
+                viewModel.changeLockerPin(newPin)
+                isRecoveryDialogOpen = false
+                viewModel.onPinClear()
+                viewModel.showToast("PIN reset successfully! Please unlock your vault.")
+            }
+        )
+    }
 }
 
 @Composable
@@ -159,7 +177,8 @@ private fun VaultLockedView(
     isPinError: Boolean,
     onDigit: (String) -> Unit,
     onClear: () -> Unit,
-    onBackspace: () -> Unit
+    onBackspace: () -> Unit,
+    onForgotPinClick: () -> Unit
 ) {
     val isConfigured = remember { VaultSecurityManager.isPinSet(context) }
 
@@ -213,6 +232,21 @@ private fun VaultLockedView(
             onClearClick = onClear,
             onBackspaceClick = onBackspace
         )
+
+        if (isConfigured) {
+            Spacer(modifier = Modifier.height(14.dp))
+            TextButton(
+                onClick = onForgotPinClick,
+                modifier = Modifier.testTag("forgot_pin_button")
+            ) {
+                Text(
+                    text = "Forgot PIN? Recover Vault 🔑",
+                    color = ArkinPrimary,
+                    fontWeight = FontWeight.SemiBold,
+                    fontSize = 13.sp
+                )
+            }
+        }
     }
 }
 
@@ -285,7 +319,7 @@ private fun VaultUnlockedView(
                     Column {
                         Row(verticalAlignment = Alignment.CenterVertically) {
                             Icon(
-                                imageVector = Icons.Default.LockOpen,
+                                imageVector = Icons.Rounded.Shield,
                                 contentDescription = "Unlocked",
                                 tint = Color.White,
                                 modifier = Modifier.size(18.dp)
@@ -320,7 +354,7 @@ private fun VaultUnlockedView(
                 colors = ButtonDefaults.buttonColors(containerColor = ArkinPrimary),
                 modifier = Modifier.weight(1f).height(46.dp).testTag("add_vault_note_btn")
             ) {
-                Icon(Icons.Default.Note, contentDescription = null, modifier = Modifier.size(16.dp))
+                Icon(Icons.AutoMirrored.Filled.Note, contentDescription = null, modifier = Modifier.size(16.dp))
                 Spacer(modifier = Modifier.width(4.dp))
                 Text("Note", fontSize = 12.sp, fontWeight = FontWeight.Bold)
             }
@@ -459,15 +493,16 @@ private fun VaultUnlockedView(
     }
 
     // Delete Confirmation Dialog
-    itemToDelete?.let { item ->
+    val currentItemToDelete = itemToDelete
+    if (currentItemToDelete != null) {
         AlertDialog(
             onDismissRequest = { itemToDelete = null },
             title = { Text("Delete Vault Item?") },
-            text = { Text("Are you sure you want to permanently delete '${item.title}'? This action cannot be undone.") },
+            text = { Text("Are you sure you want to permanently delete '${currentItemToDelete.title}'? This action cannot be undone.") },
             confirmButton = {
                 Button(
                     onClick = {
-                        viewModel.deleteVaultItem(item)
+                        viewModel.deleteVaultItem(currentItemToDelete)
                         itemToDelete = null
                     },
                     colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFDC2626))
@@ -493,7 +528,7 @@ private fun VaultItemCard(
     val icon = when (item.fileType) {
         "IMAGE" -> Icons.Default.Image
         "DOCUMENT" -> Icons.Default.Description
-        else -> Icons.Default.Note
+        else -> Icons.AutoMirrored.Filled.Note
     }
 
     val iconBg = when (item.fileType) {
@@ -596,7 +631,7 @@ private fun VaultItemCard(
                     ),
                     modifier = Modifier.fillMaxWidth().height(38.dp)
                 ) {
-                    Icon(Icons.Default.OpenInNew, contentDescription = null, modifier = Modifier.size(14.dp))
+                    Icon(Icons.AutoMirrored.Filled.OpenInNew, contentDescription = null, modifier = Modifier.size(14.dp))
                     Spacer(modifier = Modifier.width(6.dp))
                     Text(
                         text = "Decrypt & View (${item.attachmentName ?: "File"})",
@@ -810,6 +845,312 @@ private fun AddAttachmentDetailsDialog(
                         colors = ButtonDefaults.buttonColors(containerColor = ArkinPrimary)
                     ) {
                         Text("Encrypt & Save 🔒", fontWeight = FontWeight.Bold)
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+fun VaultRecoveryDialog(
+    context: Context,
+    profileEmail: String?,
+    onDismiss: () -> Unit,
+    onPinReset: (String) -> Unit
+) {
+    val configuredQuestion = remember { VaultSecurityManager.getSecurityQuestion(context) }
+    val configuredEmail = remember { VaultSecurityManager.getRecoveryEmail(context) }
+    val effectiveEmail = configuredEmail ?: profileEmail
+
+    var selectedMode by remember {
+        mutableStateOf(if (!configuredQuestion.isNullOrBlank()) "question" else "email")
+    }
+    var answerInput by remember { mutableStateOf("") }
+    var emailInput by remember { mutableStateOf("") }
+    var newPinInput by remember { mutableStateOf("") }
+    var confirmPinInput by remember { mutableStateOf("") }
+    var isVerified by remember { mutableStateOf(false) }
+    var errorMessage by remember { mutableStateOf<String?>(null) }
+
+    Dialog(onDismissRequest = onDismiss) {
+        Surface(
+            shape = RoundedCornerShape(26.dp),
+            color = MaterialTheme.colorScheme.surface,
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(16.dp)
+        ) {
+            Column(modifier = Modifier.padding(22.dp)) {
+                // Header
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Surface(
+                            shape = CircleShape,
+                            color = ArkinPrimary.copy(alpha = 0.12f),
+                            modifier = Modifier.size(36.dp)
+                        ) {
+                            Box(contentAlignment = Alignment.Center) {
+                                Icon(
+                                    imageVector = Icons.Rounded.Key,
+                                    contentDescription = null,
+                                    tint = ArkinPrimary,
+                                    modifier = Modifier.size(20.dp)
+                                )
+                            }
+                        }
+                        Spacer(modifier = Modifier.width(10.dp))
+                        Text(
+                            text = if (isVerified) "Create New PIN" else "Vault Recovery",
+                            style = MaterialTheme.typography.titleMedium,
+                            fontWeight = FontWeight.Bold,
+                            color = MaterialTheme.colorScheme.onSurface
+                        )
+                    }
+                    IconButton(onClick = onDismiss) {
+                        Icon(Icons.Default.Close, contentDescription = "Close")
+                    }
+                }
+
+                Spacer(modifier = Modifier.height(14.dp))
+
+                if (errorMessage != null) {
+                    Surface(
+                        shape = RoundedCornerShape(10.dp),
+                        color = Color(0xFFFEE2E2),
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(bottom = 12.dp)
+                    ) {
+                        Text(
+                            text = "⚠️ $errorMessage",
+                            color = Color(0xFFDC2626),
+                            fontSize = 12.sp,
+                            fontWeight = FontWeight.SemiBold,
+                            modifier = Modifier.padding(8.dp)
+                        )
+                    }
+                }
+
+                if (!isVerified) {
+                    // Mode Toggle (Question vs Email)
+                    if (!configuredQuestion.isNullOrBlank() && !effectiveEmail.isNullOrBlank()) {
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(bottom = 14.dp),
+                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            Surface(
+                                onClick = {
+                                    selectedMode = "question"
+                                    errorMessage = null
+                                },
+                                shape = RoundedCornerShape(12.dp),
+                                color = if (selectedMode == "question") ArkinPrimary else MaterialTheme.colorScheme.surfaceVariant,
+                                modifier = Modifier.weight(1f)
+                            ) {
+                                Text(
+                                    text = "Security Question",
+                                    fontSize = 11.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    color = if (selectedMode == "question") Color.White else MaterialTheme.colorScheme.onSurface,
+                                    modifier = Modifier.padding(vertical = 8.dp, horizontal = 4.dp),
+                                    textAlign = TextAlign.Center
+                                )
+                            }
+                            Surface(
+                                onClick = {
+                                    selectedMode = "email"
+                                    errorMessage = null
+                                },
+                                shape = RoundedCornerShape(12.dp),
+                                color = if (selectedMode == "email") ArkinPrimary else MaterialTheme.colorScheme.surfaceVariant,
+                                modifier = Modifier.weight(1f)
+                            ) {
+                                Text(
+                                    text = "Recovery Email",
+                                    fontSize = 11.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    color = if (selectedMode == "email") Color.White else MaterialTheme.colorScheme.onSurface,
+                                    modifier = Modifier.padding(vertical = 8.dp, horizontal = 4.dp),
+                                    textAlign = TextAlign.Center
+                                )
+                            }
+                        }
+                    }
+
+                    if (selectedMode == "question" && !configuredQuestion.isNullOrBlank()) {
+                        Text(
+                            text = "Answer your secret question to verify vault ownership:",
+                            fontSize = 12.sp,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                        Spacer(modifier = Modifier.height(8.dp))
+                        Surface(
+                            shape = RoundedCornerShape(12.dp),
+                            color = MaterialTheme.colorScheme.surfaceVariant,
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Text(
+                                text = "❓ $configuredQuestion",
+                                fontSize = 13.sp,
+                                fontWeight = FontWeight.SemiBold,
+                                color = MaterialTheme.colorScheme.onSurface,
+                                modifier = Modifier.padding(12.dp)
+                            )
+                        }
+
+                        Spacer(modifier = Modifier.height(10.dp))
+
+                        OutlinedTextField(
+                            value = answerInput,
+                            onValueChange = {
+                                answerInput = it
+                                errorMessage = null
+                            },
+                            label = { Text("Your Answer") },
+                            placeholder = { Text("Enter secret answer") },
+                            singleLine = true,
+                            shape = RoundedCornerShape(14.dp),
+                            colors = OutlinedTextFieldDefaults.colors(focusedBorderColor = ArkinPrimary),
+                            modifier = Modifier.fillMaxWidth()
+                        )
+
+                        Spacer(modifier = Modifier.height(16.dp))
+
+                        Button(
+                            onClick = {
+                                if (VaultSecurityManager.verifySecurityAnswer(context, answerInput)) {
+                                    isVerified = true
+                                    errorMessage = null
+                                } else {
+                                    errorMessage = "Incorrect answer. Please try again."
+                                }
+                            },
+                            enabled = answerInput.isNotBlank(),
+                            shape = RoundedCornerShape(14.dp),
+                            colors = ButtonDefaults.buttonColors(containerColor = ArkinPrimary),
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Text("Verify Answer →", fontWeight = FontWeight.Bold)
+                        }
+                    } else {
+                        // Email Mode
+                        Text(
+                            text = "Enter your registered student or recovery email:",
+                            fontSize = 12.sp,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                        Spacer(modifier = Modifier.height(10.dp))
+
+                        OutlinedTextField(
+                            value = emailInput,
+                            onValueChange = {
+                                emailInput = it
+                                errorMessage = null
+                            },
+                            label = { Text("Registered Email") },
+                            placeholder = { Text("student@example.com") },
+                            singleLine = true,
+                            shape = RoundedCornerShape(14.dp),
+                            colors = OutlinedTextFieldDefaults.colors(focusedBorderColor = ArkinPrimary),
+                            modifier = Modifier.fillMaxWidth()
+                        )
+
+                        Spacer(modifier = Modifier.height(16.dp))
+
+                        Button(
+                            onClick = {
+                                if (VaultSecurityManager.verifyRecoveryEmail(context, emailInput, profileEmail)) {
+                                    isVerified = true
+                                    errorMessage = null
+                                } else {
+                                    errorMessage = "Email does not match our records. Please verify spelling."
+                                }
+                            },
+                            enabled = emailInput.isNotBlank(),
+                            shape = RoundedCornerShape(14.dp),
+                            colors = ButtonDefaults.buttonColors(containerColor = ArkinPrimary),
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Text("Verify Email →", fontWeight = FontWeight.Bold)
+                        }
+                    }
+                } else {
+                    // User is verified! Set New PIN
+                    Text(
+                        text = "Identity Verified! Set your new 4-digit PIN:",
+                        fontSize = 12.sp,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                    Spacer(modifier = Modifier.height(10.dp))
+
+                    OutlinedTextField(
+                        value = newPinInput,
+                        onValueChange = {
+                            if (it.length <= 4 && it.all { ch -> ch.isDigit() }) {
+                                newPinInput = it
+                                errorMessage = null
+                            }
+                        },
+                        label = { Text("New 4-Digit PIN") },
+                        placeholder = { Text("••••") },
+                        visualTransformation = PasswordVisualTransformation(),
+                        singleLine = true,
+                        shape = RoundedCornerShape(14.dp),
+                        colors = OutlinedTextFieldDefaults.colors(focusedBorderColor = ArkinPrimary),
+                        modifier = Modifier.fillMaxWidth()
+                    )
+
+                    Spacer(modifier = Modifier.height(8.dp))
+
+                    OutlinedTextField(
+                        value = confirmPinInput,
+                        onValueChange = {
+                            if (it.length <= 4 && it.all { ch -> ch.isDigit() }) {
+                                confirmPinInput = it
+                                errorMessage = null
+                            }
+                        },
+                        label = { Text("Confirm New PIN") },
+                        placeholder = { Text("••••") },
+                        visualTransformation = PasswordVisualTransformation(),
+                        singleLine = true,
+                        shape = RoundedCornerShape(14.dp),
+                        colors = OutlinedTextFieldDefaults.colors(focusedBorderColor = ArkinPrimary),
+                        modifier = Modifier.fillMaxWidth()
+                    )
+
+                    Spacer(modifier = Modifier.height(16.dp))
+
+                    Button(
+                        onClick = {
+                            if (newPinInput.length != 4) {
+                                errorMessage = "PIN must be exactly 4 digits."
+                                return@Button
+                            }
+                            if (newPinInput != confirmPinInput) {
+                                errorMessage = "PINs do not match."
+                                return@Button
+                            }
+                            val success = VaultSecurityManager.resetPinWithRecovery(context, newPinInput)
+                            if (success) {
+                                onPinReset(newPinInput)
+                            } else {
+                                errorMessage = "Failed to save new PIN."
+                            }
+                        },
+                        enabled = newPinInput.length == 4 && confirmPinInput.length == 4,
+                        shape = RoundedCornerShape(14.dp),
+                        colors = ButtonDefaults.buttonColors(containerColor = ArkinPrimary),
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Text("Reset & Unlock Vault 🔓", fontWeight = FontWeight.Bold)
                     }
                 }
             }

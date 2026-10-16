@@ -70,6 +70,7 @@ import com.example.ui.theme.AccentOrangeText
 import com.example.ui.theme.AccentPurpleBg
 import com.example.ui.theme.AccentPurpleText
 import com.example.ui.theme.ArkinPrimary
+import com.example.ui.theme.ArkinPrimaryLight
 
 @Composable
 fun ProfileScreen(viewModel: ArkinViewModel) {
@@ -137,11 +138,21 @@ fun ProfileScreen(viewModel: ArkinViewModel) {
                 modifier = Modifier.padding(top = 2.dp)
             )
 
-            val collegeLabel = profile?.collegeName ?: "School of Engineering & Technology"
-            val semLabel = profile?.semester ?: "Semester 4"
+            val college = profile?.collegeName?.takeIf { it.isNotBlank() }
+            val sem = profile?.semester?.takeIf { it.isNotBlank() }
+            val displayText = when {
+                college != null && sem != null -> "$college • $sem"
+                college != null -> college
+                sem != null -> sem
+                else -> "Tap 'Student Profile' to add university & semester"
+            }
+
+            val badgeBg = if (isDark) MaterialTheme.colorScheme.surfaceVariant else AccentBlueBg
+            val badgeText = if (isDark) ArkinPrimaryLight else AccentBlueText
+
             Surface(
                 shape = RoundedCornerShape(10.dp),
-                color = AccentBlueBg,
+                color = badgeBg,
                 modifier = Modifier.padding(top = 8.dp)
             ) {
                 Row(
@@ -151,15 +162,15 @@ fun ProfileScreen(viewModel: ArkinViewModel) {
                     Icon(
                         imageVector = Icons.Default.School,
                         contentDescription = "Academic",
-                        tint = AccentBlueText,
+                        tint = badgeText,
                         modifier = Modifier.size(14.dp)
                     )
                     Spacer(modifier = Modifier.width(6.dp))
                     Text(
-                        text = "$collegeLabel • $semLabel",
+                        text = displayText,
                         fontSize = 11.sp,
                         fontWeight = FontWeight.SemiBold,
-                        color = AccentBlueText
+                        color = badgeText
                     )
                 }
             }
@@ -181,7 +192,7 @@ fun ProfileScreen(viewModel: ArkinViewModel) {
                 ) {
                     Surface(
                         shape = CircleShape,
-                        color = Color(0xFFFEF3C7),
+                        color = if (isDark) Color(0xFF78350F).copy(alpha = 0.4f) else Color(0xFFFEF3C7),
                         modifier = Modifier.size(38.dp)
                     ) {
                         Box(contentAlignment = Alignment.Center) {
@@ -200,13 +211,21 @@ fun ProfileScreen(viewModel: ArkinViewModel) {
                             Spacer(modifier = Modifier.width(6.dp))
                             Surface(
                                 shape = RoundedCornerShape(4.dp),
-                                color = if (firebaseUser != null) Color(0xFFDCFCE7) else Color(0xFFF3F4F6)
+                                color = if (firebaseUser != null) {
+                                    if (isDark) Color(0xFF14532D).copy(alpha = 0.6f) else Color(0xFFDCFCE7)
+                                } else {
+                                    if (isDark) MaterialTheme.colorScheme.surfaceVariant else Color(0xFFF3F4F6)
+                                }
                             ) {
                                 Text(
                                     text = if (firebaseUser != null) "ONLINE" else "GUEST",
                                     fontSize = 9.sp,
                                     fontWeight = FontWeight.Bold,
-                                    color = if (firebaseUser != null) Color(0xFF16A34A) else Color(0xFF6B7280),
+                                    color = if (firebaseUser != null) {
+                                        if (isDark) Color(0xFF4ADE80) else Color(0xFF16A34A)
+                                    } else {
+                                        if (isDark) Color(0xFF9CA3AF) else Color(0xFF6B7280)
+                                    },
                                     modifier = Modifier.padding(horizontal = 5.dp, vertical = 2.dp)
                                 )
                             }
@@ -252,8 +271,8 @@ fun ProfileScreen(viewModel: ArkinViewModel) {
                     SettingsRow(
                         title = "AI Document & Timetable Parser",
                         icon = Icons.Default.AutoAwesome,
-                        bgColor = Color(0xFFF3E8FF),
-                        iconColor = Color(0xFF9333EA),
+                        bgColor = if (isDark) MaterialTheme.colorScheme.surfaceVariant else Color(0xFFF3E8FF),
+                        iconColor = if (isDark) Color(0xFFC084FC) else Color(0xFF9333EA),
                         onClick = { viewModel.navigateTo(AppScreen.AI_DOC_ORGANIZER) }
                     )
 
@@ -310,9 +329,9 @@ fun ProfileScreen(viewModel: ArkinViewModel) {
                     SettingsRow(
                         title = "Log Out",
                         icon = Icons.Default.ExitToApp,
-                        bgColor = Color(0xFFFEE2E2),
-                        iconColor = Color(0xFFDC2626),
-                        titleColor = Color(0xFFDC2626),
+                        bgColor = if (isDark) Color(0xFF7F1D1D).copy(alpha = 0.35f) else Color(0xFFFEE2E2),
+                        iconColor = if (isDark) Color(0xFFF87171) else Color(0xFFDC2626),
+                        titleColor = if (isDark) Color(0xFFF87171) else Color(0xFFDC2626),
                         onClick = { viewModel.logout() }
                     )
                 }

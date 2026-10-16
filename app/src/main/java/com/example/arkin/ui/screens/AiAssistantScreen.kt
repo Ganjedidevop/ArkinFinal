@@ -172,120 +172,178 @@ fun AiAssistantScreen(viewModel: ArkinViewModel) {
             }
         }
 
-        // Suggested Prompts Row
-        LazyRow(
-            contentPadding = PaddingValues(horizontal = 16.dp, vertical = 8.dp),
-            horizontalArrangement = Arrangement.spacedBy(8.dp),
-            modifier = Modifier.fillMaxWidth()
-        ) {
-            items(suggestions) { prompt ->
-                Surface(
-                    onClick = {
-                        if (!isLoading) {
-                            lastSubmittedPrompt = prompt
-                            viewModel.sendAiMessage(prompt)
-                        }
-                    },
-                    shape = RoundedCornerShape(14.dp),
-                    color = MaterialTheme.colorScheme.surface,
-                    shadowElevation = 1.dp,
-                    modifier = Modifier.testTag("ai_suggestion_chip")
+        // Automatically scroll down when user is typing so recent messages stay visible
+        LaunchedEffect(inputQuery) {
+            if (inputQuery.isNotBlank() && messages.isNotEmpty()) {
+                listState.animateScrollToItem(messages.size - 1)
+            }
+        }
+
+        if (messages.isEmpty()) {
+            // Elegant Centered Empty State with Suggestions
+            Box(
+                modifier = Modifier
+                    .weight(1f)
+                    .fillMaxWidth()
+                    .padding(horizontal = 24.dp),
+                contentAlignment = Alignment.Center
+            ) {
+                Column(
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    verticalArrangement = Arrangement.Center
                 ) {
+                    Surface(
+                        shape = CircleShape,
+                        color = AccentPinkBg,
+                        modifier = Modifier.size(76.dp)
+                    ) {
+                        Box(contentAlignment = Alignment.Center) {
+                            Icon(
+                                imageVector = Icons.Rounded.Psychology,
+                                contentDescription = "Arkin AI",
+                                tint = AccentPinkText,
+                                modifier = Modifier.size(42.dp)
+                            )
+                        }
+                    }
+
+                    Spacer(modifier = Modifier.height(18.dp))
+
                     Text(
-                        text = prompt,
-                        fontSize = 12.sp,
-                        fontWeight = FontWeight.SemiBold,
-                        color = ArkinPrimary,
-                        modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp)
+                        text = "How can Arkin help you today?",
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.Bold,
+                        color = MaterialTheme.colorScheme.onBackground
+                    )
+
+                    Text(
+                        text = "Ask homework questions, format your notes, or extract exam summaries instantly.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        textAlign = androidx.compose.ui.text.style.TextAlign.Center,
+                        modifier = Modifier.padding(top = 4.dp, bottom = 22.dp)
+                    )
+
+                    Column(
+                        verticalArrangement = Arrangement.spacedBy(8.dp),
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        suggestions.forEach { prompt ->
+                            Surface(
+                                onClick = {
+                                    if (!isLoading) {
+                                        lastSubmittedPrompt = prompt
+                                        viewModel.sendAiMessage(prompt)
+                                    }
+                                },
+                                shape = RoundedCornerShape(14.dp),
+                                color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f),
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .testTag("ai_suggestion_chip")
+                            ) {
+                                Row(
+                                    modifier = Modifier.padding(horizontal = 14.dp, vertical = 10.dp),
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Text(
+                                        text = prompt,
+                                        fontSize = 13.sp,
+                                        fontWeight = FontWeight.Medium,
+                                        color = MaterialTheme.colorScheme.onSurface
+                                    )
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        } else {
+            // Chat Message History List
+            LazyColumn(
+                state = listState,
+                contentPadding = PaddingValues(horizontal = 16.dp, vertical = 10.dp),
+                verticalArrangement = Arrangement.spacedBy(14.dp),
+                modifier = Modifier
+                    .weight(1f)
+                    .fillMaxWidth()
+            ) {
+                items(messages, key = { it.id }) { msg ->
+                    val isFailed = msg.sender == "ai" && (
+                        msg.text.contains("timed out", ignoreCase = true) ||
+                        msg.text.contains("rate limit", ignoreCase = true) ||
+                        msg.text.contains("error", ignoreCase = true) && msg.text.length < 150
+                    )
+
+                    ChatBubble(
+                        message = msg,
+                        isFailed = isFailed,
+                        onRetry = {
+                            val retryQuery = lastSubmittedPrompt ?: messages.lastOrNull { it.sender == "user" }?.text
+                            if (!retryQuery.isNullOrBlank() && !isLoading) {
+                                viewModel.sendAiMessage(retryQuery)
+                            }
+                        },
+                        onCopy = {
+                            clipboardManager.setText(AnnotatedString(msg.text))
+                            viewModel.showToast("Copied to clipboard")
+                        },
+                        onSaveAsNote = {
+                            viewModel.saveNote(
+                                title = "AI Study Note: ${msg.text.take(30)}...",
+                                content = msg.text,
+                                tag = "Study",
+                                colorKey = "purple",
+                                isSecure = false
+                            )
+                            viewModel.showToast("Saved to My Notes! 📝")
+                        }
                     )
                 }
-            }
-        }
 
-        // Chat Message History List
-        LazyColumn(
-            state = listState,
-            contentPadding = PaddingValues(horizontal = 16.dp, vertical = 10.dp),
-            verticalArrangement = Arrangement.spacedBy(14.dp),
-            modifier = Modifier
-                .weight(1f)
-                .fillMaxWidth()
-        ) {
-            items(messages, key = { it.id }) { msg ->
-                val isFailed = msg.sender == "ai" && (
-                    msg.text.contains("timed out", ignoreCase = true) ||
-                    msg.text.contains("rate limit", ignoreCase = true) ||
-                    msg.text.contains("error", ignoreCase = true) && msg.text.length < 150
-                )
-
-                ChatBubble(
-                    message = msg,
-                    isFailed = isFailed,
-                    onRetry = {
-                        val retryQuery = lastSubmittedPrompt ?: messages.lastOrNull { it.sender == "user" }?.text
-                        if (!retryQuery.isNullOrBlank() && !isLoading) {
-                            viewModel.sendAiMessage(retryQuery)
-                        }
-                    },
-                    onCopy = {
-                        clipboardManager.setText(AnnotatedString(msg.text))
-                        viewModel.showToast("Copied to clipboard")
-                    },
-                    onSaveAsNote = {
-                        viewModel.saveNote(
-                            title = "AI Study Note: ${msg.text.take(30)}...",
-                            content = msg.text,
-                            tag = "Study",
-                            colorKey = "purple",
-                            isSecure = false
-                        )
-                        viewModel.showToast("Saved to My Notes! 📝")
-                    }
-                )
-            }
-
-            // Loading / Thinking state
-            if (isLoading) {
-                item {
-                    Row(
-                        modifier = Modifier.padding(vertical = 4.dp),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Surface(
-                            shape = CircleShape,
-                            color = AccentPinkBg,
-                            modifier = Modifier.size(32.dp)
+                // Loading / Thinking state
+                if (isLoading) {
+                    item {
+                        Row(
+                            modifier = Modifier.padding(vertical = 4.dp),
+                            verticalAlignment = Alignment.CenterVertically
                         ) {
-                            Box(contentAlignment = Alignment.Center) {
-                                Icon(
-                                    imageVector = Icons.Rounded.Psychology,
-                                    contentDescription = "AI",
-                                    tint = AccentPinkText,
-                                    modifier = Modifier.size(18.dp)
-                                )
-                            }
-                        }
-                        Spacer(modifier = Modifier.width(10.dp))
-                        Surface(
-                            shape = RoundedCornerShape(18.dp),
-                            color = MaterialTheme.colorScheme.surface,
-                            shadowElevation = 1.dp
-                        ) {
-                            Row(
-                                modifier = Modifier.padding(horizontal = 16.dp, vertical = 12.dp),
-                                verticalAlignment = Alignment.CenterVertically
+                            Surface(
+                                shape = CircleShape,
+                                color = AccentPinkBg,
+                                modifier = Modifier.size(32.dp)
                             ) {
-                                CircularProgressIndicator(
-                                    color = ArkinPrimary,
-                                    strokeWidth = 2.dp,
-                                    modifier = Modifier.size(16.dp)
-                                )
-                                Spacer(modifier = Modifier.width(10.dp))
-                                Text(
-                                    text = "Arkin is researching & structuring answer...",
-                                    fontSize = 13.sp,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                                )
+                                Box(contentAlignment = Alignment.Center) {
+                                    Icon(
+                                        imageVector = Icons.Rounded.Psychology,
+                                        contentDescription = "AI",
+                                        tint = AccentPinkText,
+                                        modifier = Modifier.size(18.dp)
+                                    )
+                                }
+                            }
+                            Spacer(modifier = Modifier.width(10.dp))
+                            Surface(
+                                shape = RoundedCornerShape(18.dp),
+                                color = MaterialTheme.colorScheme.surface,
+                                shadowElevation = 1.dp
+                            ) {
+                                Row(
+                                    modifier = Modifier.padding(horizontal = 16.dp, vertical = 12.dp),
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    CircularProgressIndicator(
+                                        color = ArkinPrimary,
+                                        strokeWidth = 2.dp,
+                                        modifier = Modifier.size(16.dp)
+                                    )
+                                    Spacer(modifier = Modifier.width(10.dp))
+                                    Text(
+                                        text = "Arkin is researching & structuring answer...",
+                                        fontSize = 13.sp,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                                    )
+                                }
                             }
                         }
                     }
@@ -293,28 +351,40 @@ fun AiAssistantScreen(viewModel: ArkinViewModel) {
             }
         }
 
-        // Input Bar
+        // Sleek & Compact Keyboard-Friendly Input Bar
         Surface(
             color = MaterialTheme.colorScheme.surface,
-            shadowElevation = 8.dp,
+            shadowElevation = 6.dp,
             modifier = Modifier.fillMaxWidth()
         ) {
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(horizontal = 16.dp, vertical = 10.dp),
+                    .padding(horizontal = 12.dp, vertical = 8.dp),
                 verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(10.dp)
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
             ) {
                 OutlinedTextField(
                     value = inputQuery,
                     onValueChange = { inputQuery = it },
-                    placeholder = { Text("Ask Arkin about your courses, homework, or concepts...") },
-                    maxLines = 4,
-                    shape = RoundedCornerShape(20.dp),
+                    placeholder = { 
+                        Text(
+                            text = "Ask Arkin anything...",
+                            fontSize = 13.sp,
+                            maxLines = 1,
+                            overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis
+                        ) 
+                    },
+                    maxLines = 3,
+                    shape = RoundedCornerShape(24.dp),
                     colors = OutlinedTextFieldDefaults.colors(
+                        focusedContainerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f),
+                        unfocusedContainerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.35f),
                         focusedBorderColor = ArkinPrimary,
-                        unfocusedBorderColor = MaterialTheme.colorScheme.outline
+                        unfocusedBorderColor = Color.Transparent,
+                        focusedTextColor = MaterialTheme.colorScheme.onSurface,
+                        unfocusedTextColor = MaterialTheme.colorScheme.onSurface,
+                        cursorColor = ArkinPrimary
                     ),
                     modifier = Modifier
                         .weight(1f)
@@ -332,9 +402,9 @@ fun AiAssistantScreen(viewModel: ArkinViewModel) {
                     },
                     shape = CircleShape,
                     color = if (inputQuery.isNotBlank() && !isLoading) ArkinPrimary else MaterialTheme.colorScheme.surfaceVariant,
-                    shadowElevation = if (inputQuery.isNotBlank()) 4.dp else 0.dp,
+                    shadowElevation = if (inputQuery.isNotBlank()) 3.dp else 0.dp,
                     modifier = Modifier
-                        .size(48.dp)
+                        .size(44.dp)
                         .testTag("ai_chat_send_button")
                 ) {
                     Box(contentAlignment = Alignment.Center) {
@@ -342,7 +412,7 @@ fun AiAssistantScreen(viewModel: ArkinViewModel) {
                             imageVector = Icons.AutoMirrored.Filled.Send,
                             contentDescription = "Send",
                             tint = if (inputQuery.isNotBlank() && !isLoading) Color.White else MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f),
-                            modifier = Modifier.size(20.dp)
+                            modifier = Modifier.size(18.dp)
                         )
                     }
                 }

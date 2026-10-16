@@ -6,6 +6,7 @@ import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -169,43 +170,51 @@ fun NoteDialog(
                 Spacer(modifier = Modifier.height(12.dp))
 
                 // AI Study Assistant Tool Row
-                Row(
-                    modifier = Modifier.fillMaxWidth()
-                ) {
+                val isDarkDialog = isSystemInDarkTheme()
+                val summarizeBg = if (isDarkDialog) MaterialTheme.colorScheme.surfaceVariant else Color(0xFFECFDF5)
+                val summarizeText = if (isDarkDialog) Color(0xFF34D399) else Color(0xFF059669)
+                val formatBg = if (isDarkDialog) MaterialTheme.colorScheme.surfaceVariant else Color(0xFFF3E8FF)
+                val formatText = if (isDarkDialog) Color(0xFFC084FC) else Color(0xFF9333EA)
 
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(10.dp)
+                ) {
                     // AI Summarize Button (Groq study summarizer)
                     Surface(
                         onClick = {
-                            if (content.isNotBlank() && !isAiSummarizing) {
+                            if (content.isNotBlank() && !isAiSummarizing && !isAiEnhancing) {
                                 isAiSummarizing = true
                                 coroutineScope.launch {
                                     val summary = GroqHelper.askAssistant(
-                                        "Summarize the following study notes into structured, highly concise bullet points suitable for quick exam revision. Input text: $content"
+                                        "Summarize the following study notes into structured, highly concise bullet points suitable for quick exam revision. Input text:\n\n$content"
                                     )
-                                    content = if (content.contains("--- 📌 AI Exam Revision Summary ---")) {
-                                        content + "\n\n" + summary
-                                    } else {
-                                        content + "\n\n--- 📌 AI Exam Revision Summary ---\n" + summary
+                                    if (summary.isNotBlank() && !summary.startsWith("⚠️")) {
+                                        content = if (content.contains("--- 📌 AI Exam Revision Summary ---")) {
+                                            content + "\n\n" + summary
+                                        } else {
+                                            content + "\n\n--- 📌 AI Exam Revision Summary ---\n" + summary
+                                        }
                                     }
                                     isAiSummarizing = false
                                 }
                             }
                         },
                         shape = RoundedCornerShape(12.dp),
-                        color = Color(0xFFECFDF5),
+                        color = summarizeBg,
                         modifier = Modifier
                             .weight(1f)
                             .testTag("note_ai_summarize_button")
                     ) {
                         Row(
-                            modifier = Modifier.padding(vertical = 8.dp, horizontal = 10.dp),
+                            modifier = Modifier.padding(vertical = 9.dp, horizontal = 10.dp),
                             verticalAlignment = Alignment.CenterVertically,
                             horizontalArrangement = Arrangement.Center
                         ) {
                             if (isAiSummarizing) {
                                 CircularProgressIndicator(
                                     strokeWidth = 2.dp,
-                                    color = Color(0xFF059669),
+                                    color = summarizeText,
                                     modifier = Modifier.size(13.dp)
                                 )
                                 Spacer(modifier = Modifier.width(6.dp))
@@ -213,13 +222,13 @@ fun NoteDialog(
                                     text = "Summarizing...",
                                     fontSize = 11.sp,
                                     fontWeight = FontWeight.Bold,
-                                    color = Color(0xFF059669)
+                                    color = summarizeText
                                 )
                             } else {
                                 Icon(
                                     imageVector = Icons.Rounded.AutoAwesome,
                                     contentDescription = "AI Summarize",
-                                    tint = Color(0xFF059669),
+                                    tint = summarizeText,
                                     modifier = Modifier.size(15.dp)
                                 )
                                 Spacer(modifier = Modifier.width(6.dp))
@@ -227,7 +236,7 @@ fun NoteDialog(
                                     text = "AI Summarize",
                                     fontSize = 11.sp,
                                     fontWeight = FontWeight.Bold,
-                                    color = Color(0xFF059669)
+                                    color = summarizeText
                                 )
                             }
                         }
@@ -236,32 +245,34 @@ fun NoteDialog(
                     // AI Enhance & Format
                     Surface(
                         onClick = {
-                            if (content.isNotBlank() && !isAiEnhancing) {
+                            if (content.isNotBlank() && !isAiEnhancing && !isAiSummarizing) {
                                 isAiEnhancing = true
                                 coroutineScope.launch {
                                     val improved = GroqHelper.askAssistant(
-                                        "Expand and structure this student note neatly with bullet points and bold key terms:\nTitle: $title\nContent:\n$content"
+                                        "You are an expert student note organizer. Please expand and format this student note neatly with clear headings, organized bullet points, and bold key terms. Keep all facts intact:\nTitle: $title\nContent:\n$content"
                                     )
-                                    content = improved
+                                    if (improved.isNotBlank() && !improved.startsWith("⚠️")) {
+                                        content = improved
+                                    }
                                     isAiEnhancing = false
                                 }
                             }
                         },
                         shape = RoundedCornerShape(12.dp),
-                        color = Color(0xFFF3E8FF),
+                        color = formatBg,
                         modifier = Modifier
                             .weight(1.1f)
                             .testTag("ai_enhance_note_button")
                     ) {
                         Row(
-                            modifier = Modifier.padding(vertical = 8.dp, horizontal = 10.dp),
+                            modifier = Modifier.padding(vertical = 9.dp, horizontal = 10.dp),
                             verticalAlignment = Alignment.CenterVertically,
                             horizontalArrangement = Arrangement.Center
                         ) {
                             if (isAiEnhancing) {
                                 CircularProgressIndicator(
                                     strokeWidth = 2.dp,
-                                    color = Color(0xFF9333EA),
+                                    color = formatText,
                                     modifier = Modifier.size(13.dp)
                                 )
                                 Spacer(modifier = Modifier.width(6.dp))
@@ -269,13 +280,13 @@ fun NoteDialog(
                                     text = "Formatting...",
                                     fontSize = 11.sp,
                                     fontWeight = FontWeight.Bold,
-                                    color = Color(0xFF9333EA)
+                                    color = formatText
                                 )
                             } else {
                                 Icon(
                                     imageVector = Icons.Rounded.AutoAwesome,
                                     contentDescription = "AI Format",
-                                    tint = Color(0xFF9333EA),
+                                    tint = formatText,
                                     modifier = Modifier.size(15.dp)
                                 )
                                 Spacer(modifier = Modifier.width(6.dp))
@@ -283,7 +294,7 @@ fun NoteDialog(
                                     text = "AI Format",
                                     fontSize = 11.sp,
                                     fontWeight = FontWeight.Bold,
-                                    color = Color(0xFF9333EA)
+                                    color = formatText
                                 )
                             }
                         }

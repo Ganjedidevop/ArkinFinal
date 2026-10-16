@@ -29,8 +29,8 @@ object GroqHelper {
     private const val GROQ_ENDPOINT = "https://api.groq.com/openai/v1/chat/completions"
     
     // Verified currently supported models on Groq
-    const val PRIMARY_MODEL = "openai/gpt-oss-20b"
-    const val FALLBACK_MODEL = "qwen/qwen3.8-27b"
+    const val PRIMARY_MODEL = "llama-3.3-70b-versatile"
+    const val FALLBACK_MODEL = "llama-3.1-8b-instant"
 
     /**
      * Optional Backend / Firebase Cloud Functions proxy URL for production.
@@ -57,6 +57,50 @@ object GroqHelper {
         }
     }
 
+    private fun executeCompletionsCall(
+        userPrompt: String,
+        contextNotes: String,
+        conversationHistory: List<Pair<String, String>>,
+        modelName: String,
+        apiKey: String,
+        proxyUrl: String?
+    ): String? {
+        try {
+            val jsonPayload = buildRequestPayload(userPrompt, contextNotes, conversationHistory, modelName)
+            val mediaType = "application/json; charset=utf-8".toMediaType()
+            val requestBody = jsonPayload.toString().toRequestBody(mediaType)
+
+            val requestBuilder = Request.Builder()
+            if (!proxyUrl.isNullOrBlank()) {
+                requestBuilder.url(proxyUrl).post(requestBody)
+            } else {
+                requestBuilder
+                    .url(GROQ_ENDPOINT)
+                    .addHeader("Authorization", "Bearer $apiKey")
+                    .addHeader("Content-Type", "application/json")
+                    .post(requestBody)
+            }
+
+            val response = client.newCall(requestBuilder.build()).execute()
+            val responseBody = response.body?.string().orEmpty()
+            val statusCode = response.code
+
+            if (response.isSuccessful) {
+                val parsedText = parseChatCompletionResponse(responseBody)
+                if (parsedText.isNotBlank()) {
+                    return parsedText
+                }
+            } else {
+                Log.w(TAG, "Groq call failed with model $modelName, status $statusCode: $responseBody")
+            }
+        } catch (e: SocketTimeoutException) {
+            Log.w(TAG, "Timeout contacting Groq API with model $modelName", e)
+        } catch (e: Exception) {
+            Log.w(TAG, "Exception calling Groq API with model $modelName", e)
+        }
+        return null
+    }
+
     /**
      * Send a study prompt to Groq AI with context notes and chat history.
      */
@@ -71,58 +115,31 @@ object GroqHelper {
 
         // If either a backend proxy or a valid direct API key is available, call the API
         if (!proxyUrl.isNullOrBlank() || apiKey.isNotBlank()) {
-            try {
-                val jsonPayload = buildRequestPayload(userPrompt, contextNotes, conversationHistory, model)
-                val mediaType = "application/json; charset=utf-8".toMediaType()
-                val requestBody = jsonPayload.toString().toRequestBody(mediaType)
+            val primaryResult = executeCompletionsCall(
+                userPrompt,
+                contextNotes,
+                conversationHistory,
+                model,
+                apiKey,
+                proxyUrl
+            )
+            if (!primaryResult.isNullOrBlank()) {
+                return@withContext primaryResult
+            }
 
-                val requestBuilder = Request.Builder()
-                if (!proxyUrl.isNullOrBlank()) {
-                    // Call backend proxy without client API key (backend secures the key)
-                    requestBuilder.url(proxyUrl).post(requestBody)
-                } else {
-                    // Call Groq OpenAI-compatible Chat Completions API directly
-                    requestBuilder
-                        .url(GROQ_ENDPOINT)
-                        .addHeader("Authorization", "Bearer $apiKey")
-                        .addHeader("Content-Type", "application/json")
-                        .post(requestBody)
+            // Retry with fallback model if primary was used
+            if (model == PRIMARY_MODEL) {
+                val fallbackResult = executeCompletionsCall(
+                    userPrompt,
+                    contextNotes,
+                    conversationHistory,
+                    FALLBACK_MODEL,
+                    apiKey,
+                    proxyUrl
+                )
+                if (!fallbackResult.isNullOrBlank()) {
+                    return@withContext fallbackResult
                 }
-
-                val response = client.newCall(requestBuilder.build()).execute()
-                val responseBody = response.body?.string().orEmpty()
-                val statusCode = response.code
-
-                when {
-                    response.isSuccessful -> {
-                        val parsedText = parseChatCompletionResponse(responseBody)
-                        if (parsedText.isNotBlank()) {
-                            return@withContext parsedText
-                        } else {
-                            Log.w(TAG, "Groq response contained empty choices: $responseBody")
-                        }
-                    }
-                    statusCode == 401 -> {
-                        Log.e(TAG, "Groq API error: 401 Unauthorized. Please verify GROQ_API_KEY in .env.")
-                    }
-                    statusCode == 429 -> {
-                        Log.w(TAG, "Groq API error: 429 Rate limit reached.")
-                        return@withContext "⚠️ Arkin AI is receiving a high volume of requests right now. Please wait a moment and try again."
-                    }
-                    statusCode in 500..599 -> {
-                        Log.w(TAG, "Groq API error: $statusCode Server error: $responseBody")
-                    }
-                    else -> {
-                        Log.w(TAG, "Groq API error code: $statusCode, body: $responseBody")
-                    }
-                }
-            } catch (e: SocketTimeoutException) {
-                Log.w(TAG, "Network timeout contacting Groq API", e)
-                return@withContext "⏱️ The AI request timed out. Please check your connection and try again."
-            } catch (e: IOException) {
-                Log.w(TAG, "Network failure contacting Groq API (offline)", e)
-            } catch (e: Exception) {
-                Log.e(TAG, "Unexpected error contacting Groq API", e)
             }
         }
 
@@ -272,11 +289,57 @@ object GroqHelper {
             }
 
             query.contains("summarize") || query.contains("summary") -> {
-                if (notesContext.isNotBlank()) {
-                    "📝 **Summary of your notes:**\n\n• **Core Topic:** Key academic principles & revision highlights.\n• **Main Takeaways:**\n  - Focus on fundamental definitions and formulas.\n  - Ensure understanding of relational operations and architectures.\n  - Review lecture slides before exams.\n\n💡 *Pro-tip: Try creating 3 flashcards from this note to test your active recall!*"
-                } else {
-                    "📝 **Study Summary Generator:**\nTo summarize a specific note, tap 'Summarize with AI' right on any note card in your Notes tab, or paste the text here and I'll extract key bullet points, formulas, and exam keywords!"
+                val rawText = when {
+                    notesContext.isNotBlank() -> notesContext
+                    prompt.contains("Input text:", ignoreCase = true) -> prompt.substringAfter("Input text:").trim()
+                    prompt.contains("Content:", ignoreCase = true) -> prompt.substringAfter("Content:").trim()
+                    else -> prompt
                 }
+
+                val sentences = rawText.split(Regex("[.\n]+"))
+                    .map { it.trim().removePrefix("•").removePrefix("-").trim() }
+                    .filter { it.length > 8 }
+
+                if (sentences.isNotEmpty() && rawText.length > 30) {
+                    val bullets = sentences.take(4).joinToString("\n") { "• **Key Concept:** $it" }
+                    """
+                        📝 **AI Exam Revision Summary:**
+                        
+                        $bullets
+                        
+                        💡 *Tip: Test your active recall on these core points before class!*
+                    """.trimIndent()
+                } else {
+                    "📝 **Study Summary Generator:**\nTo summarize a note, tap 'AI Summarize' while editing or viewing any note, or paste the content into chat!"
+                }
+            }
+
+            query.contains("expand") || query.contains("structure") || query.contains("format") || query.contains("enhance") -> {
+                val noteTitle = if (prompt.contains("Title:", ignoreCase = true)) {
+                    prompt.substringAfter("Title:").substringBefore("\n").trim()
+                } else "Study Notes"
+
+                val noteBody = if (prompt.contains("Content:", ignoreCase = true)) {
+                    prompt.substringAfter("Content:").trim()
+                } else prompt
+
+                val lines = noteBody.split("\n")
+                    .map { it.trim() }
+                    .filter { it.isNotEmpty() }
+
+                val formattedItems = lines.joinToString("\n") { line ->
+                    if (line.startsWith("•") || line.startsWith("-") || line.startsWith("#")) line else "• **${line.take(24)}...** $line"
+                }
+
+                """
+                    # 📌 $noteTitle
+                    
+                    ### 📖 Structured Study Highlights
+                    $formattedItems
+                    
+                    ---
+                    *Neatly organized by Arkin AI*
+                """.trimIndent()
             }
 
             query.contains("dbms") || query.contains("database") || query.contains("acid") || query.contains("normal") -> {

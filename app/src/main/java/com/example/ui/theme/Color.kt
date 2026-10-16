@@ -20,7 +20,7 @@ val ArkinSurfaceVariantDark = Color(0xFF26283B)
 val ArkinTextDark = Color(0xFFF3F4F6)
 val ArkinTextMutedDark = Color(0xFF9E9EB8)
 
-// Semantic Accents for Study Categories
+// Semantic Accents for Study Categories (Light Mode)
 val AccentPurpleBg = Color(0xFFF3E8FF)
 val AccentPurpleText = Color(0xFF9333EA)
 
@@ -47,3 +47,32 @@ val AccentGreenText = Color(0xFF16A34A)
 
 val AccentRedBg = Color(0xFFFEE2E2)
 val AccentRedText = Color(0xFFDC2626)
+
+// Semantic Accents for Study Categories (Dark Mode - High Contrast & Radiant)
+val AccentPurpleBgDark = Color(0xFF2E1C4E)
+val AccentPurpleTextDark = Color(0xFFD8B4FE)
+
+val AccentTealBgDark = Color(0xFF0D2C3D)
+val AccentTealTextDark = Color(0xFF7DD3FC)
+
+val AccentOrangeBgDark = Color(0xFF3D1F0E)
+val AccentOrangeTextDark = Color(0xFFFDBA74)
+
+val AccentBlueBgDark = Color(0xFF1C214E)
+val AccentBlueTextDark = Color(0xFFA5B4FC)
+
+val AccentPinkBgDark = Color(0xFF391629)
+val AccentPinkTextDark = Color(0xFFF472B6)
+
+val AccentLockerBgDark = Color(0xFF142646)
+val AccentLockerTextDark = Color(0xFF60A5FA)
+
+val AccentYellowBgDark = Color(0xFF382F0B)
+val AccentYellowTextDark = Color(0xFFFDE047)
+
+val AccentGreenBgDark = Color(0xFF10331D)
+val AccentGreenTextDark = Color(0xFF86EFAC)
+
+val AccentRedBgDark = Color(0xFF3D1414)
+val AccentRedTextDark = Color(0xFFFCA5A5)
+
