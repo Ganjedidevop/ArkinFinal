@@ -22,6 +22,18 @@ object FirestoreManager {
     private fun userDoc(uid: String): DocumentReference =
         firestore.collection("users").document(uid)
 
+    fun mapFirestoreException(e: Exception): Exception {
+        val msg = e.message ?: ""
+        return when {
+            msg.contains("PERMISSION_DENIED", ignoreCase = true) ||
+            msg.contains("Missing or insufficient permissions", ignoreCase = true) ->
+                Exception("PERMISSION_DENIED: Missing or insufficient permissions. Please deploy the user-scoped Firestore security rules from 'firestore.rules' in Firebase Console for project 'arkin-22b82'.")
+            msg.contains("UNAVAILABLE", ignoreCase = true) || msg.contains("network", ignoreCase = true) ->
+                Exception("Network unavailable. Firestore offline persistence is enabled; data will synchronize automatically when connection is restored.")
+            else -> e
+        }
+    }
+
     // ==========================================
     // Student Profile
     // ==========================================
@@ -326,55 +338,55 @@ object FirestoreManager {
             // 1. Profile
             val profile = db.studentProfileDao().getProfileSync()
             if (profile != null) {
-                saveProfile(profile.copy(lastBackupDate = System.currentTimeMillis()), uid)
+                saveProfile(profile.copy(lastBackupDate = System.currentTimeMillis()), uid).getOrThrow()
                 itemsSynced++
             }
 
             // 2. Notes
             val notes = db.noteDao().getAllNotesSync()
             notes.forEach { note ->
-                saveNote(note)
+                saveNote(note).getOrThrow()
                 itemsSynced++
             }
 
             // 3. Tasks
             val tasks = db.taskDao().getAllTasksSync()
             tasks.forEach { task ->
-                saveTask(task)
+                saveTask(task).getOrThrow()
                 itemsSynced++
             }
 
             // 4. Homework
             val homework = db.homeworkDao().getAllHomeworkSync()
             homework.forEach { hw ->
-                saveHomework(hw)
+                saveHomework(hw).getOrThrow()
                 itemsSynced++
             }
 
             // 5. Timetable
             val timetable = db.timetableDao().getAllClassesSync()
             timetable.forEach { tt ->
-                saveTimetableClass(tt)
+                saveTimetableClass(tt).getOrThrow()
                 itemsSynced++
             }
 
             // 6. Exam Results
             val examResults = db.examResultDao().getAllExamResultsSync()
             examResults.forEach { exam ->
-                saveExamResult(exam)
+                saveExamResult(exam).getOrThrow()
                 itemsSynced++
             }
 
             // 7. Reminders
             val reminders = db.reminderDao().getAllRemindersSync()
             reminders.forEach { rem ->
-                saveReminder(rem)
+                saveReminder(rem).getOrThrow()
                 itemsSynced++
             }
 
             Result.success(itemsSynced)
         } catch (e: Exception) {
-            Result.failure(e)
+            Result.failure(mapFirestoreException(e))
         }
     }
 
@@ -567,7 +579,7 @@ object FirestoreManager {
 
             Result.success(restoredCount)
         } catch (e: Exception) {
-            Result.failure(e)
+            Result.failure(mapFirestoreException(e))
         }
     }
 }

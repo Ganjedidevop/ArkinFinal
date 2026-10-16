@@ -162,8 +162,16 @@ fun MainAppContent(viewModel: ArkinViewModel) {
             note = editingNote,
             isSecureMode = isSecureNoteDialog,
             onDismiss = { viewModel.closeNoteDialog() },
-            onSave = { title, content, tag, colorKey, isSecure ->
-                viewModel.saveNote(title, content, tag, colorKey, isSecure)
+            onSave = { title, content, tag, colorKey, isSecure, attUri, attName ->
+                viewModel.saveNote(
+                    title = title,
+                    content = content,
+                    tag = tag,
+                    colorKey = colorKey,
+                    isSecure = isSecure,
+                    attachmentUri = attUri,
+                    attachmentName = attName
+                )
             }
         )
     }
