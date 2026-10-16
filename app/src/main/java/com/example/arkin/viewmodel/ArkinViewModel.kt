@@ -2,10 +2,11 @@ package com.example.arkin.viewmodel
 
 import android.app.Application
 import android.content.Context
+import android.content.Intent
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.example.arkin.data.ArkinDatabase
-import com.example.arkin.data.ai.GeminiHelper
+import com.example.arkin.data.ai.GroqHelper
 import com.example.arkin.data.backup.BackupManager
 import com.example.arkin.data.backup.BackupPreview
 import com.example.arkin.data.firebase.FirebaseAuthHelper
@@ -24,8 +25,11 @@ import android.net.Uri
 import com.example.arkin.model.AppScreen
 import com.example.arkin.model.BottomNavTab
 import com.example.arkin.model.ChatMessage
+import com.example.arkin.model.DocProcessingState
 import com.example.arkin.model.DocUploadType
 import com.example.arkin.model.ParsedTimetableClass
+import com.example.arkin.util.DocumentTextExtractor
+import com.example.arkin.util.ExtractionResult
 import com.google.firebase.auth.FirebaseUser
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
@@ -34,6 +38,8 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
+import org.json.JSONArray
+import org.json.JSONObject
 
 class ArkinViewModel(application: Application) : AndroidViewModel(application) {
 
@@ -171,8 +177,14 @@ class ArkinViewModel(application: Application) : AndroidViewModel(application) {
     val toastMessage = MutableStateFlow<String?>(null)
 
     // AI Document Upload & Organizer
-    val uploadedDocName = MutableStateFlow<String?>("Engineering_Weekly_Timetable.pdf")
+    val uploadedDocName = MutableStateFlow<String?>(null)
     val uploadedDocType = MutableStateFlow(DocUploadType.TIMETABLE)
+    val selectedDocUri = MutableStateFlow<Uri?>(null)
+    val docFileSize = MutableStateFlow<Long>(0L)
+    val docProcessingState = MutableStateFlow(DocProcessingState.IDLE)
+    val docProcessingStatusText = MutableStateFlow("Ready to analyze")
+    val docProcessingError = MutableStateFlow<String?>(null)
+    val docExtractedRawText = MutableStateFlow<String?>(null)
     val isAnalyzingDoc = MutableStateFlow(false)
     val analyzedDocResult = MutableStateFlow<String?>(null)
     val parsedClasses = MutableStateFlow<List<ParsedTimetableClass>>(emptyList())
@@ -290,7 +302,9 @@ class ArkinViewModel(application: Application) : AndroidViewModel(application) {
         colorKey: String,
         isSecure: Boolean,
         subject: String = "General",
-        category: String = "Class Notes"
+        category: String = "Class Notes",
+        attachmentUri: String? = null,
+        attachmentName: String? = null
     ) {
         viewModelScope.launch {
             val existing = editingNote.value
@@ -302,6 +316,8 @@ class ArkinViewModel(application: Application) : AndroidViewModel(application) {
                     colorKey = colorKey,
                     subject = subject,
                     category = category,
+                    attachmentUri = attachmentUri ?: existing.attachmentUri,
+                    attachmentName = attachmentName ?: existing.attachmentName,
                     timestamp = System.currentTimeMillis()
                 )
                 noteDao.updateNote(updated)
@@ -317,6 +333,8 @@ class ArkinViewModel(application: Application) : AndroidViewModel(application) {
                     colorKey = colorKey,
                     subject = subject,
                     category = category,
+                    attachmentUri = attachmentUri,
+                    attachmentName = attachmentName,
                     timestamp = System.currentTimeMillis(),
                     isSecure = isSecure
                 )
@@ -413,7 +431,10 @@ class ArkinViewModel(application: Application) : AndroidViewModel(application) {
         teacherName: String = "",
         priority: String = "Medium",
         colorKey: String = "purple",
-        extractedQuestions: String? = null
+        extractedQuestions: String? = null,
+        attachmentUri: String? = null,
+        attachmentName: String? = null,
+        attachmentSize: String? = null
     ) {
         if (title.isBlank() || subject.isBlank()) return
         viewModelScope.launch {
@@ -427,7 +448,10 @@ class ArkinViewModel(application: Application) : AndroidViewModel(application) {
                 priority = priority,
                 status = "Not Started",
                 colorKey = colorKey,
-                extractedQuestionsJson = extractedQuestions
+                extractedQuestionsJson = extractedQuestions,
+                attachmentUri = attachmentUri,
+                attachmentName = attachmentName,
+                attachmentSize = attachmentSize
             )
             val id = homeworkDao.insertHomework(hw)
             val plannerTask = TaskEntity(
@@ -445,6 +469,42 @@ class ArkinViewModel(application: Application) : AndroidViewModel(application) {
                 FirestoreManager.saveTask(plannerTask.copy(id = taskId))
             }
             showToast("Homework added and synced to study planner")
+        }
+    }
+
+    fun attachFileToHomework(hw: HomeworkEntity, uri: Uri) {
+        val (name, size) = DocumentTextExtractor.getFileMetadata(getApplication(), uri)
+        val sizeStr = DocumentTextExtractor.formatFileSize(size)
+        viewModelScope.launch {
+            try {
+                getApplication<Application>().contentResolver.takePersistableUriPermission(
+                    uri,
+                    Intent.FLAG_GRANT_READ_URI_PERMISSION
+                )
+            } catch (_: Exception) {}
+            val updated = hw.copy(
+                attachmentUri = uri.toString(),
+                attachmentName = name,
+                attachmentSize = sizeStr
+            )
+            homeworkDao.updateHomework(updated)
+            selectedAssignment.value = updated
+            if (studentProfile.value?.cloudSyncEnabled == true && FirebaseAuthHelper.isUserLoggedIn) {
+                FirestoreManager.saveHomework(updated)
+            }
+            showToast("Attached: $name")
+        }
+    }
+
+    fun removeHomeworkAttachment(hw: HomeworkEntity) {
+        viewModelScope.launch {
+            val updated = hw.copy(attachmentUri = null, attachmentName = null, attachmentSize = null)
+            homeworkDao.updateHomework(updated)
+            selectedAssignment.value = updated
+            if (studentProfile.value?.cloudSyncEnabled == true && FirebaseAuthHelper.isUserLoggedIn) {
+                FirestoreManager.saveHomework(updated)
+            }
+            showToast("Attachment removed")
         }
     }
 
@@ -468,7 +528,7 @@ class ArkinViewModel(application: Application) : AndroidViewModel(application) {
     fun solveAssignmentQuestionWithAi(hw: HomeworkEntity, question: String) {
         _isAiLoading.value = true
         viewModelScope.launch {
-            val answer = GeminiHelper.solveAssignmentQuestion(hw.title, question)
+            val answer = GroqHelper.solveAssignmentQuestion(hw.title, question)
             val updated = hw.copy(aiDraftAnswer = answer)
             homeworkDao.updateHomework(updated)
             selectedAssignment.value = updated
@@ -772,7 +832,7 @@ class ArkinViewModel(application: Application) : AndroidViewModel(application) {
             val notesSummary = filteredPublicNotes.value.take(3).joinToString("\n---\n") {
                 "${it.title}: ${it.content}"
             }
-            val aiResponse = GeminiHelper.askAssistant(trimmed, notesSummary, history)
+            val aiResponse = GroqHelper.askAssistant(trimmed, notesSummary, history)
             _chatMessages.value = _chatMessages.value + ChatMessage(sender = "ai", text = aiResponse)
             _isAiLoading.value = false
         }
@@ -795,70 +855,360 @@ class ArkinViewModel(application: Application) : AndroidViewModel(application) {
     // AI Document Upload & Organizer
     fun setUploadDocType(type: DocUploadType) {
         uploadedDocType.value = type
+        selectedDocUri.value = null
+        uploadedDocName.value = null
+        docFileSize.value = 0L
+        docProcessingState.value = DocProcessingState.IDLE
+        docProcessingStatusText.value = "Ready to analyze"
+        docProcessingError.value = null
+        docExtractedRawText.value = null
         analyzedDocResult.value = null
         parsedClasses.value = emptyList()
         parsedAssignments.value = emptyList()
         parsedExamQuestions.value = emptyList()
-        uploadedDocName.value = when (type) {
-            DocUploadType.TIMETABLE -> "Semester_Schedule_2026.pdf"
-            DocUploadType.QUESTION_PAPER -> "DBMS_Midterm_Paper.pdf"
-            DocUploadType.ASSIGNMENT -> "OS_Lab_Assignment_4.docx"
-            DocUploadType.LECTURE_NOTE -> "Chapter_5_Distributed_Systems.png"
+    }
+
+    fun onDocumentSelected(uri: Uri) {
+        selectedDocUri.value = uri
+        val (name, size) = DocumentTextExtractor.getFileMetadata(getApplication(), uri)
+        uploadedDocName.value = name
+        docFileSize.value = size
+        docProcessingState.value = DocProcessingState.IDLE
+        docProcessingStatusText.value = "Document ready for analysis"
+        docProcessingError.value = null
+        docExtractedRawText.value = null
+        analyzedDocResult.value = null
+        parsedClasses.value = emptyList()
+        parsedAssignments.value = emptyList()
+        parsedExamQuestions.value = emptyList()
+        showToast("Selected: $name")
+    }
+
+    fun removeSelectedDocument() {
+        selectedDocUri.value = null
+        uploadedDocName.value = null
+        docFileSize.value = 0L
+        docProcessingState.value = DocProcessingState.IDLE
+        docProcessingStatusText.value = "Ready to analyze"
+        docProcessingError.value = null
+        docExtractedRawText.value = null
+        analyzedDocResult.value = null
+        parsedClasses.value = emptyList()
+        parsedAssignments.value = emptyList()
+        parsedExamQuestions.value = emptyList()
+    }
+
+    fun cancelDocProcessing() {
+        docProcessingState.value = DocProcessingState.IDLE
+        docProcessingStatusText.value = "Cancelled"
+        isAnalyzingDoc.value = false
+    }
+
+    fun updateParsedClass(index: Int, updated: ParsedTimetableClass) {
+        val current = parsedClasses.value.toMutableList()
+        if (index in 0 until current.size) {
+            current[index] = updated
+            parsedClasses.value = current
         }
     }
 
-    fun analyzeDocument(filename: String, customPrompt: String = "") {
-        uploadedDocName.value = filename
+    fun deleteParsedClass(index: Int) {
+        val current = parsedClasses.value.toMutableList()
+        if (index in 0 until current.size) {
+            current.removeAt(index)
+            parsedClasses.value = current
+            showToast("Class removed from schedule review")
+        }
+    }
+
+    fun addParsedClass(entry: ParsedTimetableClass) {
+        parsedClasses.value = parsedClasses.value + entry
+    }
+
+    fun startDocumentAnalysis(customPrompt: String = "") {
+        val uri = selectedDocUri.value
+        val docName = uploadedDocName.value ?: "Document.pdf"
+
+        if (uri == null) {
+            showToast("Please select a document or scan a photo first.")
+            return
+        }
+
+        docProcessingState.value = DocProcessingState.READING_DOCUMENT
+        docProcessingStatusText.value = "Reading document..."
+        docProcessingError.value = null
         isAnalyzingDoc.value = true
-        analyzedDocResult.value = null
 
         viewModelScope.launch {
-            val type = uploadedDocType.value
-            val prompt = when (type) {
-                DocUploadType.TIMETABLE -> {
-                    "Analyze this student class timetable document '$filename'. " +
-                            "Extract each day's lectures, start/end time, subject names, classrooms, and faculty. " +
-                            "Organize into a clean weekly schedule with recommendations for study gaps."
-                }
-                DocUploadType.QUESTION_PAPER -> {
-                    "Analyze this university examination question paper '$filename'. " +
-                            "Break down key topics tested, marks distribution, step-by-step model solutions for the hardest questions, and high-yield revision tips."
-                }
-                DocUploadType.ASSIGNMENT -> {
-                    "Analyze this student assignment sheet '$filename'. " +
-                            "Identify the course, assignment title, due date, deliverable checklist, and recommended problem-solving steps."
-                }
-                DocUploadType.LECTURE_NOTE -> {
-                    "Analyze and summarize this lecture note document '$filename' into structured exam revision bullet points, formulas, and flashcards."
-                }
-            } + if (customPrompt.isNotBlank()) "\nStudent notes: $customPrompt" else ""
+            // Step 1: Document reading & On-device OCR
+            docProcessingState.value = DocProcessingState.EXTRACTING_TEXT
+            val extraction = DocumentTextExtractor.extractText(getApplication(), uri) { step, _ ->
+                docProcessingStatusText.value = step
+            }
 
-            val result = GeminiHelper.askAssistant(prompt)
-            analyzedDocResult.value = result
-            isAnalyzingDoc.value = false
-            parsedClasses.value = emptyList()
-            parsedAssignments.value = emptyList()
-            parsedExamQuestions.value = emptyList()
-            showToast("Document analyzed by Arkin AI ✨")
+            val extractedDoc = when (extraction) {
+                is ExtractionResult.Success -> extraction.document
+                is ExtractionResult.Failure -> {
+                    docProcessingState.value = DocProcessingState.FAILED
+                    docProcessingError.value = extraction.errorMessage
+                    docProcessingStatusText.value = "Text extraction failed"
+                    isAnalyzingDoc.value = false
+                    showToast(extraction.errorMessage)
+                    return@launch
+                }
+            }
+
+            val textContent = extractedDoc.text
+            docExtractedRawText.value = textContent
+
+            // Step 2: Send extracted text to AI for structured timetable/document analysis
+            docProcessingState.value = DocProcessingState.ANALYZING_AI
+            docProcessingStatusText.value = "Arkin AI is analyzing timetable & schedule..."
+
+            val type = uploadedDocType.value
+            when (type) {
+                DocUploadType.TIMETABLE -> {
+                    val prompt = """
+                        You are Arkin AI, an expert academic schedule and timetable assistant for college students.
+                        Analyze the following extracted text from a class timetable document ("${extractedDoc.fileName}").
+                        Parse each lecture or lab period into structured data.
+                        
+                        Required timetable fields for each class:
+                        - "day": must be standard 3-letter day: "Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"
+                        - "subject": course name (e.g. "Computer Networks", "Database Systems")
+                        - "timeSlot": time interval string (e.g. "09:00 AM - 10:30 AM")
+                        - "startTime": start time (e.g. "09:00 AM")
+                        - "endTime": end time (e.g. "10:30 AM")
+                        - "room": classroom or lab (e.g. "Room 304", "Lab 2", "Hall B")
+                        - "faculty": teacher/professor name if present
+                        - "isLab": boolean (true if practical or lab)
+                        - "colorKey": one of "purple", "blue", "teal", "orange", "pink"
+                        
+                        You MUST respond with valid JSON in this exact structure:
+                        {
+                          "summary": "Clear student-focused Markdown summary of the timetable schedule, total classes per week, and recommended study gaps.",
+                          "classes": [
+                             {
+                               "day": "Mon",
+                               "subject": "Distributed Systems",
+                               "timeSlot": "09:00 AM - 10:30 AM",
+                               "startTime": "09:00 AM",
+                               "endTime": "10:30 AM",
+                               "room": "Room 401",
+                               "faculty": "Prof. Rao",
+                               "isLab": false,
+                               "colorKey": "purple"
+                             }
+                          ]
+                        }
+                        
+                        Do not wrap with anything other than the JSON object.
+                        ${if (customPrompt.isNotBlank()) "Student notes: $customPrompt" else ""}
+                        
+                        Extracted Document Text:
+                        ---
+                        $textContent
+                        ---
+                    """.trimIndent()
+
+                    val rawResponse = GroqHelper.askAssistant(prompt)
+                    val parsed = parseTimetableAiResponse(rawResponse)
+                    analyzedDocResult.value = parsed.first
+                    parsedClasses.value = parsed.second
+                    docProcessingState.value = DocProcessingState.REVIEWING
+                    docProcessingStatusText.value = "Analysis complete (${parsed.second.size} classes found)"
+                    isAnalyzingDoc.value = false
+                    showToast("Extracted ${parsed.second.size} classes! Review and confirm below 🗓️")
+                }
+
+                DocUploadType.ASSIGNMENT -> {
+                    val prompt = """
+                        You are Arkin AI. Analyze this assignment sheet ("${extractedDoc.fileName}").
+                        Extract:
+                        1. Course/Subject
+                        2. Assignment Title & Due Date
+                        3. List of specific questions/deliverables
+                        4. Step-by-step model approach
+                        
+                        Return JSON:
+                        {
+                          "summary": "Detailed Markdown explanation of the assignment deliverables and steps.",
+                          "assignments": [
+                             {
+                               "subject": "Course Name",
+                               "title": "Assignment Title",
+                               "dueDate": "Tomorrow"
+                             }
+                          ],
+                          "questions": ["Question 1 text...", "Question 2 text..."]
+                        }
+                        
+                        Document Text:
+                        $textContent
+                    """.trimIndent()
+
+                    val rawResponse = GroqHelper.askAssistant(prompt)
+                    val parsed = parseAssignmentAiResponse(rawResponse)
+                    analyzedDocResult.value = parsed.first
+                    parsedAssignments.value = parsed.second
+                    parsedExamQuestions.value = parsed.third
+                    docProcessingState.value = DocProcessingState.REVIEWING
+                    docProcessingStatusText.value = "Assignment organized"
+                    isAnalyzingDoc.value = false
+                    showToast("Assignment deliverables organized! 📚")
+                }
+
+                DocUploadType.QUESTION_PAPER, DocUploadType.LECTURE_NOTE -> {
+                    val prompt = """
+                        You are Arkin AI. Analyze this university examination paper / lecture note ("${extractedDoc.fileName}").
+                        Provide a comprehensive, high-yield revision breakdown with:
+                        - Key Topics & Exam Weightage
+                        - Detailed Solutions & Answers for hardest questions
+                        - Core Formulas and Definitions
+                        - Flashcard-style summary bullets
+                        
+                        Document Text:
+                        $textContent
+                    """.trimIndent()
+
+                    val rawResponse = GroqHelper.askAssistant(prompt)
+                    analyzedDocResult.value = rawResponse
+                    docProcessingState.value = DocProcessingState.REVIEWING
+                    docProcessingStatusText.value = "Analysis complete"
+                    isAnalyzingDoc.value = false
+                    showToast("Document analyzed! 📝")
+                }
+            }
         }
+    }
+
+    private fun parseTimetableAiResponse(rawResponse: String): Pair<String, List<ParsedTimetableClass>> {
+        val cleanJson = rawResponse.trim()
+            .removePrefix("```json").removePrefix("```")
+            .removeSuffix("```").trim()
+
+        val classesList = mutableListOf<ParsedTimetableClass>()
+        var summaryText = ""
+
+        try {
+            val json = JSONObject(cleanJson)
+            summaryText = json.optString("summary", "")
+
+            val arr = json.optJSONArray("classes")
+            if (arr != null) {
+                for (i in 0 until arr.length()) {
+                    val obj = arr.getJSONObject(i)
+                    val dayRaw = obj.optString("day", "Mon")
+                    val dayFormatted = when (dayRaw.lowercase().take(3)) {
+                        "mon" -> "Mon"
+                        "tue" -> "Tue"
+                        "wed" -> "Wed"
+                        "thu" -> "Thu"
+                        "fri" -> "Fri"
+                        "sat" -> "Sat"
+                        "sun" -> "Sun"
+                        else -> "Mon"
+                    }
+                    val subject = obj.optString("subject", "Class ${i + 1}")
+                    val timeSlot = obj.optString("timeSlot", "10:00 AM - 11:30 AM")
+                    val startTime = obj.optString("startTime", "")
+                    val endTime = obj.optString("endTime", "")
+                    val room = obj.optString("room", "Classroom")
+                    val faculty = obj.optString("faculty", "")
+                    val isLab = obj.optBoolean("isLab", false)
+                    val colorKey = obj.optString("colorKey", if (isLab) "teal" else "purple")
+
+                    classesList.add(
+                        ParsedTimetableClass(
+                            day = dayFormatted,
+                            subject = subject,
+                            timeSlot = timeSlot,
+                            room = room,
+                            faculty = faculty,
+                            colorKey = colorKey,
+                            startTime = startTime,
+                            endTime = endTime,
+                            isLab = isLab
+                        )
+                    )
+                }
+            }
+        } catch (e: Exception) {
+            summaryText = rawResponse
+        }
+
+        return Pair(summaryText.ifBlank { rawResponse }, classesList)
+    }
+
+    private fun parseAssignmentAiResponse(rawResponse: String): Triple<String, List<Triple<String, String, String>>, List<String>> {
+        val cleanJson = rawResponse.trim()
+            .removePrefix("```json").removePrefix("```")
+            .removeSuffix("```").trim()
+
+        val assignments = mutableListOf<Triple<String, String, String>>()
+        val questions = mutableListOf<String>()
+        var summaryText = ""
+
+        try {
+            val json = JSONObject(cleanJson)
+            summaryText = json.optString("summary", "")
+
+            val arr = json.optJSONArray("assignments")
+            if (arr != null) {
+                for (i in 0 until arr.length()) {
+                    val obj = arr.getJSONObject(i)
+                    val sub = obj.optString("subject", "General")
+                    val title = obj.optString("title", "Assignment Task")
+                    val due = obj.optString("dueDate", "Tomorrow")
+                    assignments.add(Triple(sub, title, due))
+                }
+            }
+
+            val qArr = json.optJSONArray("questions")
+            if (qArr != null) {
+                for (i in 0 until qArr.length()) {
+                    questions.add(qArr.getString(i))
+                }
+            }
+        } catch (e: Exception) {
+            summaryText = rawResponse
+        }
+
+        return Triple(summaryText.ifBlank { rawResponse }, assignments, questions)
     }
 
     fun applyParsedTimetableToSchedule() {
         val classes = parsedClasses.value
-        if (classes.isEmpty()) return
+        if (classes.isEmpty()) {
+            showToast("No classes found to import.")
+            return
+        }
+
+        docProcessingState.value = DocProcessingState.SAVING
+        docProcessingStatusText.value = "Saving classes to timetable..."
+
         viewModelScope.launch {
-            classes.forEach {
-                timetableDao.insertClass(
-                    TimetableEntity(
-                        dayOfWeek = it.day,
-                        subject = it.subject,
-                        timeSlot = it.timeSlot,
-                        room = it.room,
-                        facultyName = it.faculty,
-                        colorKey = it.colorKey
-                    )
+            val entities = classes.map {
+                TimetableEntity(
+                    dayOfWeek = it.day,
+                    subject = it.subject,
+                    timeSlot = it.timeSlot,
+                    startTime = it.startTime,
+                    endTime = it.endTime,
+                    room = it.room,
+                    facultyName = it.faculty,
+                    isLab = it.isLab,
+                    colorKey = it.colorKey
                 )
             }
+            timetableDao.insertClasses(entities)
+
+            if (studentProfile.value?.cloudSyncEnabled == true && FirebaseAuthHelper.isUserLoggedIn) {
+                entities.forEach { FirestoreManager.saveTimetableClass(it) }
+            }
+
+            docProcessingState.value = DocProcessingState.COMPLETED
+            docProcessingStatusText.value = "Imported ${classes.size} classes"
             showToast("All ${classes.size} classes imported into your Timetable! 🗓️")
             navigateTo(AppScreen.TIMETABLE)
         }
@@ -876,6 +1226,7 @@ class ArkinViewModel(application: Application) : AndroidViewModel(application) {
                     priority = "High"
                 )
             }
+            docProcessingState.value = DocProcessingState.COMPLETED
             showToast("Assignments added to Homework & Planner! 📚")
             navigateTo(AppScreen.HOMEWORK)
         }
@@ -885,17 +1236,20 @@ class ArkinViewModel(application: Application) : AndroidViewModel(application) {
         val content = analyzedDocResult.value ?: return
         val docName = uploadedDocName.value ?: "Question Paper Analysis"
         viewModelScope.launch {
-            noteDao.insertNote(
-                NoteEntity(
-                    title = "Exam Prep: $docName",
-                    content = content,
-                    subject = "Exam Prep",
-                    category = "Revision Notes",
-                    tag = "Exam",
-                    colorKey = "purple",
-                    timestamp = System.currentTimeMillis()
-                )
+            val note = NoteEntity(
+                title = "Exam Prep: $docName",
+                content = content,
+                subject = "Exam Prep",
+                category = "Revision Notes",
+                tag = "Exam",
+                colorKey = "purple",
+                timestamp = System.currentTimeMillis()
             )
+            val id = noteDao.insertNote(note)
+            if (studentProfile.value?.cloudSyncEnabled == true && FirebaseAuthHelper.isUserLoggedIn) {
+                FirestoreManager.saveNote(note.copy(id = id))
+            }
+            docProcessingState.value = DocProcessingState.COMPLETED
             showToast("Saved to your Study Notes! 📝")
             navigateTo(AppScreen.NOTES)
         }
