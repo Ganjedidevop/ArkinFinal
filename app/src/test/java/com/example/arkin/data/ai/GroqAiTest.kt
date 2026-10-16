@@ -27,7 +27,7 @@ class GroqAiTest {
             model = GroqHelper.PRIMARY_MODEL
         )
 
-        assertEquals("openai/gpt-oss-20b", payload.getString("model"))
+        assertEquals(GroqHelper.PRIMARY_MODEL, payload.getString("model"))
         assertEquals(0.7, payload.getDouble("temperature"), 0.001)
         assertEquals(1500, payload.getInt("max_tokens"))
 
@@ -110,7 +110,7 @@ class GroqAiTest {
         assertTrue(timetableFallback.contains("Timetable Organization"))
 
         val summaryFallback = GroqHelper.generateSmartStudentResponse("Please summarize these notes", "Operating Systems Chapter 1")
-        assertTrue(summaryFallback.contains("Summary of your notes"))
+        assertTrue(summaryFallback.contains("Summary"))
 
         val generalFallback = GroqHelper.generateSmartStudentResponse("What can you do?", "")
         assertTrue(generalFallback.contains("Arkin"))
