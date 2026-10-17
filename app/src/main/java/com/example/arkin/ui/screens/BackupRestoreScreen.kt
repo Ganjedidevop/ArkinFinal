@@ -19,6 +19,7 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.CloudDownload
+import androidx.compose.material.icons.filled.CloudSync
 import androidx.compose.material.icons.filled.CloudUpload
 import androidx.compose.material.icons.filled.ContentCopy
 import androidx.compose.material.icons.filled.Restore
@@ -71,6 +72,9 @@ fun BackupRestoreScreen(viewModel: ArkinViewModel) {
     val profile by viewModel.studentProfile.collectAsState()
     val backupPreview by viewModel.backupPreview.collectAsState()
     val isRestoring by viewModel.isRestoringBackup.collectAsState()
+    val firebaseUser by viewModel.firebaseUser.collectAsState()
+    val isFirestoreSyncing by viewModel.isFirestoreSyncing.collectAsState()
+    val lastFirestoreSyncTime by viewModel.lastFirestoreSyncTime.collectAsState()
 
     var generatedBackupJson by remember { mutableStateOf<String?>(null) }
     var restoreInputJson by remember { mutableStateOf("") }
@@ -101,6 +105,130 @@ fun BackupRestoreScreen(viewModel: ArkinViewModel) {
                 .padding(horizontal = 20.dp),
             verticalArrangement = Arrangement.spacedBy(16.dp)
         ) {
+            // Firebase Firestore Cloud Backend Card
+            Card(
+                shape = RoundedCornerShape(24.dp),
+                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+                elevation = CardDefaults.cardElevation(defaultElevation = 2.dp),
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Column(modifier = Modifier.padding(20.dp)) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Surface(
+                            shape = CircleShape,
+                            color = Color(0xFFFEF3C7),
+                            modifier = Modifier.size(46.dp)
+                        ) {
+                            Box(contentAlignment = Alignment.Center) {
+                                Icon(
+                                    imageVector = Icons.Default.CloudSync,
+                                    contentDescription = null,
+                                    tint = Color(0xFFD97706),
+                                    modifier = Modifier.size(24.dp)
+                                )
+                            }
+                        }
+                        Spacer(modifier = Modifier.width(14.dp))
+                        Column {
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Text(
+                                    text = "Firebase Firestore Cloud",
+                                    style = MaterialTheme.typography.titleMedium,
+                                    fontWeight = FontWeight.Bold,
+                                    color = MaterialTheme.colorScheme.onSurface
+                                )
+                                Spacer(modifier = Modifier.width(8.dp))
+                                Surface(
+                                    shape = RoundedCornerShape(6.dp),
+                                    color = if (firebaseUser != null) Color(0xFFDCFCE7) else Color(0xFFFEE2E2)
+                                ) {
+                                    Text(
+                                        text = if (firebaseUser != null) "CONNECTED" else "OFFLINE",
+                                        fontSize = 10.sp,
+                                        fontWeight = FontWeight.Bold,
+                                        color = if (firebaseUser != null) Color(0xFF16A34A) else Color(0xFFDC2626),
+                                        modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
+                                    )
+                                }
+                            }
+                            Text(
+                                text = "Project: arkin-22b82",
+                                fontSize = 12.sp,
+                                fontWeight = FontWeight.SemiBold,
+                                color = ArkinPrimary
+                            )
+                        }
+                    }
+
+                    Spacer(modifier = Modifier.height(14.dp))
+
+                    Surface(
+                        shape = RoundedCornerShape(12.dp),
+                        color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f),
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Column(modifier = Modifier.padding(12.dp)) {
+                            Text(
+                                text = "App ID: 1:605569501594:android:077f691f06780f24e19223",
+                                fontSize = 11.sp,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                            Spacer(modifier = Modifier.height(2.dp))
+                            Text(
+                                text = if (firebaseUser != null) "Account: ${firebaseUser?.email ?: firebaseUser?.displayName ?: firebaseUser?.uid}" else "Not authenticated in Firebase Auth",
+                                fontSize = 11.sp,
+                                fontWeight = FontWeight.Medium,
+                                color = MaterialTheme.colorScheme.onSurface
+                            )
+                        }
+                    }
+
+                    Spacer(modifier = Modifier.height(14.dp))
+
+                    if (firebaseUser == null) {
+                        Button(
+                            onClick = { viewModel.navigateTo(com.example.arkin.model.AppScreen.AUTH) },
+                            shape = RoundedCornerShape(16.dp),
+                            colors = ButtonDefaults.buttonColors(containerColor = ArkinPrimary),
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Text("Sign In to Connect Cloud 🔑", fontWeight = FontWeight.Bold, fontSize = 13.sp)
+                        }
+                    } else {
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.spacedBy(10.dp)
+                        ) {
+                            Button(
+                                onClick = { viewModel.syncToFirestore() },
+                                enabled = !isFirestoreSyncing,
+                                shape = RoundedCornerShape(16.dp),
+                                colors = ButtonDefaults.buttonColors(containerColor = ArkinPrimary),
+                                modifier = Modifier.weight(1f)
+                            ) {
+                                if (isFirestoreSyncing) {
+                                    CircularProgressIndicator(color = Color.White, strokeWidth = 2.dp, modifier = Modifier.size(16.dp))
+                                } else {
+                                    Text("Sync to Cloud ☁️", fontWeight = FontWeight.Bold, fontSize = 12.sp)
+                                }
+                            }
+
+                            OutlinedButton(
+                                onClick = { viewModel.syncFromFirestore() },
+                                enabled = !isFirestoreSyncing,
+                                shape = RoundedCornerShape(16.dp),
+                                modifier = Modifier.weight(1f)
+                            ) {
+                                Text("Restore Cloud 📥", fontWeight = FontWeight.Bold, fontSize = 12.sp)
+                            }
+                        }
+                    }
+                }
+            }
+
             // Storage Status Card
             Card(
                 shape = RoundedCornerShape(24.dp),

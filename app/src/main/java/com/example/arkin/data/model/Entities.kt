@@ -109,9 +109,12 @@ data class VaultItemEntity(
     val id: Long = 0,
     val title: String,
     val category: String = "Private Note", // ID Document, Certificate, Private Note, Password Hint
-    val content: String,
+    val content: String = "",
     val attachmentUri: String? = null,
     val attachmentName: String? = null,
+    val fileType: String = "TEXT", // "TEXT", "IMAGE", "DOCUMENT"
+    val fileSize: Long = 0L,
+    val mimeType: String? = null,
     val timestamp: Long = System.currentTimeMillis()
 )
 
@@ -119,16 +122,16 @@ data class VaultItemEntity(
 data class StudentProfileEntity(
     @PrimaryKey
     val id: Int = 1,
-    val name: String = "Rohan Sharma",
-    val email: String = "rohan.sharma@campus.edu",
-    val major: String = "Computer Science",
-    val university: String = "National Institute of Technology",
-    val collegeName: String = "School of Engineering & Technology",
-    val course: String = "B.Tech Computer Science & Engineering",
-    val semester: String = "Semester 4",
-    val academicYear: String = "2025-2026",
-    val lockerPin: String = "1234",
-    val currentStreak: Int = 5,
+    val name: String = "",
+    val email: String = "",
+    val major: String = "",
+    val university: String = "",
+    val collegeName: String = "",
+    val course: String = "",
+    val semester: String = "",
+    val academicYear: String = "",
+    val lockerPin: String = "",
+    val currentStreak: Int = 0,
     val isDarkMode: Boolean = false,
     val cloudSyncEnabled: Boolean = true,
     val lastBackupDate: Long = 0L,

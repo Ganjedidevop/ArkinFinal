@@ -1,5 +1,8 @@
 package com.example.arkin.ui.screens
 
+import com.example.arkin.ui.anim.animateStaggeredEntrance
+import com.example.arkin.ui.anim.bouncyClickable
+import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -39,7 +42,9 @@ import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.example.arkin.data.model.TaskEntity
 import com.example.arkin.ui.components.AppHeader
+import com.example.arkin.ui.components.ConfirmationDialog
 import com.example.arkin.ui.components.TaskItemRow
 import com.example.arkin.viewmodel.ArkinViewModel
 import com.example.ui.theme.ArkinPrimary
@@ -49,6 +54,7 @@ fun TodoScreen(viewModel: ArkinViewModel) {
     val tasks by viewModel.allTasks.collectAsState()
     var taskInput by remember { mutableStateOf("") }
     var selectedFilter by remember { mutableStateOf("All") } // All, Pending, Completed
+    var taskToDelete by remember { mutableStateOf<TaskEntity?>(null) }
 
     val filteredTasks = tasks.filter {
         when (selectedFilter) {
@@ -194,10 +200,23 @@ fun TodoScreen(viewModel: ArkinViewModel) {
                     TaskItemRow(
                         task = task,
                         onToggle = { viewModel.toggleTask(task) },
-                        onDelete = { viewModel.deleteTask(task) }
+                        onDelete = { taskToDelete = task }
                     )
                 }
             }
         }
+    }
+
+    taskToDelete?.let { task ->
+        ConfirmationDialog(
+            title = "Delete Task?",
+            message = "Are you sure you want to delete '${task.title}'? This action cannot be undone.",
+            confirmButtonText = "Delete",
+            onConfirm = {
+                viewModel.deleteTask(task)
+                taskToDelete = null
+            },
+            onDismiss = { taskToDelete = null }
+        )
     }
 }

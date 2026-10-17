@@ -8,6 +8,9 @@ import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.fadeIn
+
+import androidx.compose.animation.scaleIn
+import androidx.compose.animation.scaleOut
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.layout.Box
@@ -41,20 +44,53 @@ import com.example.arkin.ui.screens.RemindersScreen
 import com.example.arkin.ui.screens.SplashScreen
 import com.example.arkin.ui.screens.TimetableScreen
 import com.example.arkin.ui.screens.TodoScreen
+import android.Manifest
+import android.content.pm.PackageManager
+import android.os.Build
+import androidx.activity.result.contract.ActivityResultContracts
+import androidx.core.content.ContextCompat
+import android.util.Log
+import com.google.firebase.FirebaseApp
+import com.example.arkin.util.NotificationHelper
 import com.example.arkin.viewmodel.ArkinViewModel
 import com.example.ui.theme.MyApplicationTheme
 
+import androidx.compose.animation.core.tween
+import androidx.compose.animation.slideInHorizontally
+import androidx.compose.animation.slideOutHorizontally
+import androidx.compose.foundation.isSystemInDarkTheme
+
 class MainActivity : ComponentActivity() {
+    private val notificationPermissionLauncher = registerForActivityResult(
+        ActivityResultContracts.RequestPermission()
+    ) { _ -> }
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        try {
+            FirebaseApp.initializeApp(this)
+        } catch (e: Exception) {
+            Log.e("MainActivity", "Firebase initialization failed: ${e.message}")
+        }
+        NotificationHelper.createNotificationChannels(this)
+        requestNotificationPermission()
         enableEdgeToEdge()
         setContent {
             val viewModel: ArkinViewModel = viewModel()
             val profile by viewModel.studentProfile.collectAsState()
-            val isDarkMode = profile?.isDarkMode ?: false
+            val systemDark = isSystemInDarkTheme()
+            val isDarkMode = profile?.isDarkMode ?: systemDark
 
             MyApplicationTheme(darkTheme = isDarkMode) {
                 MainAppContent(viewModel = viewModel)
+            }
+        }
+    }
+
+    private fun requestNotificationPermission() {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            if (ContextCompat.checkSelfPermission(this, Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED) {
+                notificationPermissionLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
             }
         }
     }
@@ -83,12 +119,11 @@ fun MainAppContent(viewModel: ArkinViewModel) {
         viewModel.goBack()
     }
 
-    // Bottom Bar is visible on main student workflow screens
+    // Bottom Bar is visible on main student workflow screens (excluding full-screen chat to prevent keyboard squeeze)
     val shouldShowBottomBar = currentScreen in listOf(
         AppScreen.DASHBOARD,
         AppScreen.NOTES,
         AppScreen.TODO,
-        AppScreen.AI_ASSISTANT,
         AppScreen.PROFILE
     )
 
@@ -112,7 +147,15 @@ fun MainAppContent(viewModel: ArkinViewModel) {
         ) {
             AnimatedContent(
                 targetState = currentScreen,
-                transitionSpec = { fadeIn() togetherWith fadeOut() },
+                transitionSpec = {
+                    (fadeIn(animationSpec = tween(280)) + slideInHorizontally(
+                        animationSpec = tween(280),
+                        initialOffsetX = { fullWidth -> (fullWidth * 0.08f).toInt() }
+                    )) togetherWith (fadeOut(animationSpec = tween(220)) + slideOutHorizontally(
+                        animationSpec = tween(220),
+                        targetOffsetX = { fullWidth -> -(fullWidth * 0.08f).toInt() }
+                    ))
+                },
                 label = "ScreenTransition"
             ) { targetScreen ->
                 when (targetScreen) {
@@ -142,8 +185,16 @@ fun MainAppContent(viewModel: ArkinViewModel) {
             note = editingNote,
             isSecureMode = isSecureNoteDialog,
             onDismiss = { viewModel.closeNoteDialog() },
-            onSave = { title, content, tag, colorKey, isSecure ->
-                viewModel.saveNote(title, content, tag, colorKey, isSecure)
+            onSave = { title, content, tag, colorKey, isSecure, attUri, attName ->
+                viewModel.saveNote(
+                    title = title,
+                    content = content,
+                    tag = tag,
+                    colorKey = colorKey,
+                    isSecure = isSecure,
+                    attachmentUri = attUri,
+                    attachmentName = attName
+                )
             }
         )
     }

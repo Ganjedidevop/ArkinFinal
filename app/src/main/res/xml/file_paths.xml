@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="utf-8"?>
+<paths>
+    <files-path name="app_files" path="." />
+    <files-path name="attachments" path="attachments/" />
+    <files-path name="vault_files" path="vault/" />
+    <cache-path name="vault_temp" path="vault_temp/" />
+    <cache-path name="temp_cache" path="." />
+</paths>

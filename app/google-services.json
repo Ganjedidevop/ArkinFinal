@@ -1,0 +1,47 @@
+{
+  "project_info": {
+    "project_number": "605569501594",
+    "project_id": "arkin-22b82",
+    "storage_bucket": "arkin-22b82.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:605569501594:android:077f691f06780f24e19223",
+        "android_client_info": {
+          "package_name": "com.aistudio.arkinnotes.mxyqvw"
+        }
+      },
+      "oauth_client": [
+        {
+          "client_id": "605569501594-hm1e9lqa2hdcborkjc1fsejt166hh90f.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "com.aistudio.arkinnotes.mxyqvw",
+            "certificate_hash": "e2e7f020fba038a3d1b006b895136ef374a96416"
+          }
+        },
+        {
+          "client_id": "605569501594-6e4jlodgmjst33tcg13na9jf6h68dh6t.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
+      "api_key": [
+        {
+          "current_key": "AIzaSyCdKVgqR6P8J_SSHy4I1CqBAXIK1uQSuAM"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": [
+            {
+              "client_id": "605569501594-6e4jlodgmjst33tcg13na9jf6h68dh6t.apps.googleusercontent.com",
+              "client_type": 3
+            }
+          ]
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

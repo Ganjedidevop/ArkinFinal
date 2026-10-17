@@ -1,5 +1,12 @@
 package com.example.arkin.ui.components
 
+import com.example.arkin.ui.anim.bouncyClickable
+import com.example.arkin.ui.anim.floatingOffset
+import com.example.arkin.ui.anim.pulseEffect
+import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.animation.core.spring
+import androidx.compose.animation.core.Spring
+import androidx.compose.animation.core.tween
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.foundation.background
@@ -27,6 +34,9 @@ import androidx.compose.material.icons.filled.Schedule
 import androidx.compose.material.icons.rounded.CalendarMonth
 import androidx.compose.material.icons.rounded.CheckCircle
 import androidx.compose.material.icons.rounded.Psychology
+import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.Checkbox
@@ -35,8 +45,10 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
@@ -72,22 +84,65 @@ import com.example.ui.theme.AccentTealBg
 import com.example.ui.theme.AccentTealText
 import com.example.ui.theme.AccentYellowBg
 import com.example.ui.theme.AccentYellowText
+import androidx.compose.foundation.isSystemInDarkTheme
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.automirrored.filled.Backspace
+import com.example.ui.theme.AccentBlueBgDark
+import com.example.ui.theme.AccentBlueTextDark
+import com.example.ui.theme.AccentGreenBgDark
+import com.example.ui.theme.AccentGreenTextDark
+import com.example.ui.theme.AccentLockerBgDark
+import com.example.ui.theme.AccentLockerTextDark
+import com.example.ui.theme.AccentOrangeBgDark
+import com.example.ui.theme.AccentOrangeTextDark
+import com.example.ui.theme.AccentPinkBgDark
+import com.example.ui.theme.AccentPinkTextDark
+import com.example.ui.theme.AccentPurpleBgDark
+import com.example.ui.theme.AccentPurpleTextDark
+import com.example.ui.theme.AccentTealBgDark
+import com.example.ui.theme.AccentTealTextDark
+import com.example.ui.theme.AccentYellowBgDark
+import com.example.ui.theme.AccentYellowTextDark
+import com.example.ui.theme.AccentRedBg
+import com.example.ui.theme.AccentRedText
+import com.example.ui.theme.AccentRedBgDark
+import com.example.ui.theme.AccentRedTextDark
+import com.example.ui.theme.ArkinBackgroundDark
 import com.example.ui.theme.ArkinPrimary
+import com.example.ui.theme.ArkinPrimaryLight
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
 
+@Composable
 fun getCategoryColor(colorKey: String): Pair<Color, Color> {
-    return when (colorKey.lowercase()) {
-        "purple" -> AccentPurpleBg to AccentPurpleText
-        "teal" -> AccentTealBg to AccentTealText
-        "orange" -> AccentOrangeBg to AccentOrangeText
-        "blue" -> AccentBlueBg to AccentBlueText
-        "pink" -> AccentPinkBg to AccentPinkText
-        "locker" -> AccentLockerBg to AccentLockerText
-        "yellow" -> AccentYellowBg to AccentYellowText
-        "green" -> AccentGreenBg to AccentGreenText
-        else -> AccentPurpleBg to AccentPurpleText
+    val isDark = isSystemInDarkTheme() || MaterialTheme.colorScheme.background == ArkinBackgroundDark
+    return if (isDark) {
+        when (colorKey.lowercase()) {
+            "purple" -> AccentPurpleBgDark to AccentPurpleTextDark
+            "teal" -> AccentTealBgDark to AccentTealTextDark
+            "orange" -> AccentOrangeBgDark to AccentOrangeTextDark
+            "blue" -> AccentBlueBgDark to AccentBlueTextDark
+            "pink" -> AccentPinkBgDark to AccentPinkTextDark
+            "locker" -> AccentLockerBgDark to AccentLockerTextDark
+            "yellow" -> AccentYellowBgDark to AccentYellowTextDark
+            "green" -> AccentGreenBgDark to AccentGreenTextDark
+            "red" -> AccentRedBgDark to AccentRedTextDark
+            else -> AccentPurpleBgDark to AccentPurpleTextDark
+        }
+    } else {
+        when (colorKey.lowercase()) {
+            "purple" -> AccentPurpleBg to AccentPurpleText
+            "teal" -> AccentTealBg to AccentTealText
+            "orange" -> AccentOrangeBg to AccentOrangeText
+            "blue" -> AccentBlueBg to AccentBlueText
+            "pink" -> AccentPinkBg to AccentPinkText
+            "locker" -> AccentLockerBg to AccentLockerText
+            "yellow" -> AccentYellowBg to AccentYellowText
+            "green" -> AccentGreenBg to AccentGreenText
+            "red" -> AccentRedBg to AccentRedText
+            else -> AccentPurpleBg to AccentPurpleText
+        }
     }
 }
 
@@ -101,39 +156,40 @@ fun AppHeader(
         modifier = Modifier
             .fillMaxWidth()
             .padding(horizontal = 20.dp, vertical = 14.dp),
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.SpaceBetween
+        verticalAlignment = Alignment.CenterVertically
     ) {
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            if (onBackClick != null) {
-                Surface(
-                    onClick = onBackClick,
-                    shape = CircleShape,
-                    color = MaterialTheme.colorScheme.surface,
-                    shadowElevation = 2.dp,
-                    modifier = Modifier
-                        .size(42.dp)
-                        .testTag("header_back_button")
-                ) {
-                    Box(contentAlignment = Alignment.Center) {
-                        Icon(
-                            imageVector = Icons.Default.ArrowBack,
-                            contentDescription = "Back",
-                            tint = MaterialTheme.colorScheme.onSurface,
-                            modifier = Modifier.size(20.dp)
-                        )
-                    }
+        if (onBackClick != null) {
+            Surface(
+                onClick = onBackClick,
+                shape = CircleShape,
+                color = MaterialTheme.colorScheme.surface,
+                shadowElevation = 2.dp,
+                modifier = Modifier
+                    .size(42.dp)
+                    .testTag("header_back_button")
+            ) {
+                Box(contentAlignment = Alignment.Center) {
+                    Icon(
+                        imageVector = Icons.AutoMirrored.Filled.ArrowBack,
+                        contentDescription = "Back",
+                        tint = MaterialTheme.colorScheme.onSurface,
+                        modifier = Modifier.size(20.dp)
+                    )
                 }
-                Spacer(modifier = Modifier.width(14.dp))
             }
-            Text(
-                text = title,
-                style = MaterialTheme.typography.headlineSmall,
-                color = MaterialTheme.colorScheme.onBackground,
-                fontWeight = FontWeight.Bold
-            )
+            Spacer(modifier = Modifier.width(12.dp))
         }
+        Text(
+            text = title,
+            style = MaterialTheme.typography.titleLarge,
+            color = MaterialTheme.colorScheme.onBackground,
+            fontWeight = FontWeight.Bold,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+            modifier = Modifier.weight(1f)
+        )
         if (trailingAction != null) {
+            Spacer(modifier = Modifier.width(8.dp))
             trailingAction()
         }
     }
@@ -232,29 +288,35 @@ fun QuickAccessButton(
     icon: ImageVector,
     bgColor: Color,
     iconColor: Color,
+    modifier: Modifier = Modifier,
     hasBadge: Boolean = false,
     onClick: () -> Unit
 ) {
+    val isDark = isSystemInDarkTheme() || MaterialTheme.colorScheme.background == ArkinBackgroundDark
+    val surfaceColor = if (isDark) MaterialTheme.colorScheme.surfaceVariant else bgColor
+    val effectiveIconColor = if (isDark) ArkinPrimaryLight else iconColor
+
     Column(
         horizontalAlignment = Alignment.CenterHorizontally,
-        modifier = Modifier
+        modifier = modifier
+            .clip(RoundedCornerShape(16.dp))
             .clickable(onClick = onClick)
-            .padding(4.dp)
-            .testTag("quick_access_${title.lowercase()}")
+            .padding(vertical = 4.dp, horizontal = 2.dp)
+            .testTag("quick_access_${title.lowercase().replace(" ", "_")}")
     ) {
         Box(contentAlignment = Alignment.TopEnd) {
             Surface(
                 shape = RoundedCornerShape(20.dp),
-                color = bgColor,
-                shadowElevation = 2.dp,
+                color = surfaceColor,
+                shadowElevation = if (isDark) 1.dp else 2.dp,
                 modifier = Modifier.size(62.dp)
             ) {
                 Box(contentAlignment = Alignment.Center) {
                     Icon(
                         imageVector = icon,
                         contentDescription = title,
-                        tint = iconColor,
-                        modifier = Modifier.size(30.dp)
+                        tint = effectiveIconColor,
+                        modifier = Modifier.size(28.dp)
                     )
                 }
             }
@@ -264,7 +326,7 @@ fun QuickAccessButton(
                         .size(10.dp)
                         .clip(CircleShape)
                         .background(Color(0xFFEF4444))
-                        .border(1.5.dp, Color.White, CircleShape)
+                        .border(1.5.dp, MaterialTheme.colorScheme.surface, CircleShape)
                 )
             }
         }
@@ -273,12 +335,16 @@ fun QuickAccessButton(
             text = title,
             style = MaterialTheme.typography.labelMedium,
             fontWeight = FontWeight.Bold,
-            color = MaterialTheme.colorScheme.onSurface
+            color = MaterialTheme.colorScheme.onSurface,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis
         )
         Text(
             text = subtitle,
             fontSize = 9.sp,
-            color = MaterialTheme.colorScheme.onSurfaceVariant
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis
         )
     }
 }
@@ -351,7 +417,8 @@ fun NoteCard(
     onNoteClick: () -> Unit,
     onDeleteClick: () -> Unit,
     onAiSummarizeClick: () -> Unit,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    onAttachmentUpdated: ((String) -> Unit)? = null
 ) {
     val (bgColor, textColor) = getCategoryColor(note.colorKey)
     val sdf = SimpleDateFormat("MMM d", Locale.getDefault())
@@ -439,6 +506,40 @@ fun NoteCard(
                 overflow = TextOverflow.Ellipsis,
                 lineHeight = 18.sp
             )
+
+            if (!note.attachmentName.isNullOrBlank()) {
+                val context = androidx.compose.ui.platform.LocalContext.current
+                Spacer(modifier = Modifier.height(8.dp))
+                Surface(
+                    onClick = {
+                        com.example.arkin.util.FileViewerHelper.openDocument(
+                            context = context,
+                            uriString = note.attachmentUri,
+                            fileName = note.attachmentName,
+                            onUriUpdated = { newPath ->
+                                onAttachmentUpdated?.invoke(newPath)
+                            }
+                        )
+                    },
+                    shape = RoundedCornerShape(8.dp),
+                    color = Color(0xFFF3E8FF)
+                ) {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
+                    ) {
+                        Text("📎 ", fontSize = 11.sp)
+                        Text(
+                            text = note.attachmentName ?: "Attachment",
+                            fontSize = 11.sp,
+                            fontWeight = FontWeight.SemiBold,
+                            color = ArkinPrimary,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis
+                        )
+                    }
+                }
+            }
         }
     }
 }
@@ -824,7 +925,7 @@ fun PinKeypad(
                         Box(contentAlignment = Alignment.Center) {
                             if (key == "<") {
                                 Icon(
-                                    imageVector = Icons.Default.Backspace,
+                                    imageVector = Icons.AutoMirrored.Filled.Backspace,
                                     contentDescription = "Backspace",
                                     tint = MaterialTheme.colorScheme.onSurface,
                                     modifier = Modifier.size(20.dp)
@@ -844,3 +945,88 @@ fun PinKeypad(
         }
     }
 }
+
+@Composable
+fun ConfirmationDialog(
+    title: String,
+    message: String,
+    confirmButtonText: String = "Delete",
+    dismissButtonText: String = "Cancel",
+    isDestructive: Boolean = true,
+    confirmButtonColor: Color = Color(0xFFDC2626),
+    icon: ImageVector = Icons.Default.Delete,
+    onConfirm: () -> Unit,
+    onDismiss: () -> Unit
+) {
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        shape = RoundedCornerShape(24.dp),
+        containerColor = MaterialTheme.colorScheme.surface,
+        tonalElevation = 6.dp,
+        icon = {
+            Surface(
+                shape = CircleShape,
+                color = if (isDestructive) Color(0xFFFEE2E2) else Color(0xFFE0E7FF),
+                modifier = Modifier.size(52.dp)
+            ) {
+                Box(contentAlignment = Alignment.Center) {
+                    Icon(
+                        imageVector = icon,
+                        contentDescription = null,
+                        tint = if (isDestructive) Color(0xFFDC2626) else ArkinPrimary,
+                        modifier = Modifier.size(26.dp)
+                    )
+                }
+            }
+        },
+        title = {
+            Text(
+                text = title,
+                style = MaterialTheme.typography.titleLarge,
+                fontWeight = FontWeight.Bold,
+                color = MaterialTheme.colorScheme.onSurface,
+                textAlign = TextAlign.Center,
+                modifier = Modifier.fillMaxWidth()
+            )
+        },
+        text = {
+            Text(
+                text = message,
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                textAlign = TextAlign.Center,
+                modifier = Modifier.fillMaxWidth()
+            )
+        },
+        confirmButton = {
+            Button(
+                onClick = onConfirm,
+                shape = RoundedCornerShape(14.dp),
+                colors = ButtonDefaults.buttonColors(
+                    containerColor = if (isDestructive) confirmButtonColor else ArkinPrimary
+                ),
+                modifier = Modifier.height(44.dp)
+            ) {
+                Text(
+                    text = confirmButtonText,
+                    fontWeight = FontWeight.Bold,
+                    color = Color.White
+                )
+            }
+        },
+        dismissButton = {
+            OutlinedButton(
+                onClick = onDismiss,
+                shape = RoundedCornerShape(14.dp),
+                modifier = Modifier.height(44.dp)
+            ) {
+                Text(
+                    text = dismissButtonText,
+                    fontWeight = FontWeight.SemiBold,
+                    color = MaterialTheme.colorScheme.onSurface
+                )
+            }
+        }
+    )
+}
+

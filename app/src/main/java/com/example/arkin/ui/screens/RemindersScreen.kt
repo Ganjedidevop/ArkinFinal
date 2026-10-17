@@ -43,7 +43,9 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
+import com.example.arkin.data.model.ReminderEntity
 import com.example.arkin.ui.components.AppHeader
+import com.example.arkin.ui.components.ConfirmationDialog
 import com.example.arkin.ui.components.ReminderRow
 import com.example.arkin.viewmodel.ArkinViewModel
 import com.example.ui.theme.AccentYellowBg
@@ -54,6 +56,7 @@ import com.example.ui.theme.ArkinPrimary
 fun RemindersScreen(viewModel: ArkinViewModel) {
     val reminders by viewModel.allReminders.collectAsState()
     var isAddDialogOpen by remember { mutableStateOf(false) }
+    var reminderToDelete by remember { mutableStateOf<ReminderEntity?>(null) }
 
     Column(
         modifier = Modifier
@@ -138,7 +141,7 @@ fun RemindersScreen(viewModel: ArkinViewModel) {
                 items(reminders, key = { it.id }) { reminder ->
                     ReminderRow(
                         reminder = reminder,
-                        onDelete = { viewModel.deleteReminder(reminder) }
+                        onDelete = { reminderToDelete = reminder }
                     )
                 }
             }
@@ -152,6 +155,19 @@ fun RemindersScreen(viewModel: ArkinViewModel) {
                 viewModel.addReminder(title, dueText, iconKey, colorKey)
                 isAddDialogOpen = false
             }
+        )
+    }
+
+    reminderToDelete?.let { reminder ->
+        ConfirmationDialog(
+            title = "Delete Reminder?",
+            message = "Are you sure you want to delete '${reminder.title}'?",
+            confirmButtonText = "Delete",
+            onConfirm = {
+                viewModel.deleteReminder(reminder)
+                reminderToDelete = null
+            },
+            onDismiss = { reminderToDelete = null }
         )
     }
 }

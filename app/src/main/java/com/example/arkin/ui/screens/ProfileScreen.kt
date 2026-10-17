@@ -24,12 +24,13 @@ import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.CloudUpload
 import androidx.compose.material.icons.filled.DarkMode
 import androidx.compose.material.icons.filled.DeleteSweep
-import androidx.compose.material.icons.filled.ExitToApp
+import androidx.compose.material.icons.automirrored.filled.ExitToApp
 import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.School
 import com.example.arkin.model.AppScreen
+import com.example.arkin.ui.components.SecurePinChangeDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
@@ -59,6 +60,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
 import com.example.arkin.ui.components.AppHeader
+import com.example.arkin.ui.components.ConfirmationDialog
 import com.example.arkin.viewmodel.ArkinViewModel
 import com.example.ui.theme.AccentBlueBg
 import com.example.ui.theme.AccentBlueText
@@ -69,15 +71,18 @@ import com.example.ui.theme.AccentOrangeText
 import com.example.ui.theme.AccentPurpleBg
 import com.example.ui.theme.AccentPurpleText
 import com.example.ui.theme.ArkinPrimary
+import com.example.ui.theme.ArkinPrimaryLight
 
 @Composable
 fun ProfileScreen(viewModel: ArkinViewModel) {
     val profile by viewModel.studentProfile.collectAsState()
+    val firebaseUser by viewModel.firebaseUser.collectAsState()
     var isEditProfileDialogOpen by remember { mutableStateOf(false) }
     var isChangePinDialogOpen by remember { mutableStateOf(false) }
+    var showLogoutConfirmDialog by remember { mutableStateOf(false) }
 
-    val name = profile?.name ?: "Rohan Sharma"
-    val major = profile?.major ?: "Computer Science, 2nd Year"
+    val name = profile?.name?.ifBlank { "Student" } ?: "Student"
+    val major = profile?.major?.ifBlank { "Academic Scholar" } ?: "Academic Scholar"
     val isDark = profile?.isDarkMode ?: false
 
     val scrollState = rememberScrollState()
@@ -135,11 +140,21 @@ fun ProfileScreen(viewModel: ArkinViewModel) {
                 modifier = Modifier.padding(top = 2.dp)
             )
 
-            val collegeLabel = profile?.collegeName ?: "School of Engineering & Technology"
-            val semLabel = profile?.semester ?: "Semester 4"
+            val college = profile?.collegeName?.takeIf { it.isNotBlank() }
+            val sem = profile?.semester?.takeIf { it.isNotBlank() }
+            val displayText = when {
+                college != null && sem != null -> "$college • $sem"
+                college != null -> college
+                sem != null -> sem
+                else -> "Tap 'Student Profile' to add university & semester"
+            }
+
+            val badgeBg = if (isDark) MaterialTheme.colorScheme.surfaceVariant else AccentBlueBg
+            val badgeText = if (isDark) ArkinPrimaryLight else AccentBlueText
+
             Surface(
                 shape = RoundedCornerShape(10.dp),
-                color = AccentBlueBg,
+                color = badgeBg,
                 modifier = Modifier.padding(top = 8.dp)
             ) {
                 Row(
@@ -149,20 +164,84 @@ fun ProfileScreen(viewModel: ArkinViewModel) {
                     Icon(
                         imageVector = Icons.Default.School,
                         contentDescription = "Academic",
-                        tint = AccentBlueText,
+                        tint = badgeText,
                         modifier = Modifier.size(14.dp)
                     )
                     Spacer(modifier = Modifier.width(6.dp))
                     Text(
-                        text = "$collegeLabel • $semLabel",
+                        text = displayText,
                         fontSize = 11.sp,
                         fontWeight = FontWeight.SemiBold,
-                        color = AccentBlueText
+                        color = badgeText
                     )
                 }
             }
 
-            Spacer(modifier = Modifier.height(24.dp))
+            Spacer(modifier = Modifier.height(18.dp))
+
+            // Firebase Backend Connection Card
+            Card(
+                shape = RoundedCornerShape(18.dp),
+                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+                elevation = CardDefaults.cardElevation(defaultElevation = 1.dp),
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(14.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Surface(
+                        shape = CircleShape,
+                        color = if (isDark) Color(0xFF78350F).copy(alpha = 0.4f) else Color(0xFFFEF3C7),
+                        modifier = Modifier.size(38.dp)
+                    ) {
+                        Box(contentAlignment = Alignment.Center) {
+                            Text("🔥", fontSize = 18.sp)
+                        }
+                    }
+                    Spacer(modifier = Modifier.width(12.dp))
+                    Column(modifier = Modifier.weight(1f)) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Text(
+                                text = "Firebase Backend",
+                                fontWeight = FontWeight.Bold,
+                                fontSize = 13.sp,
+                                color = MaterialTheme.colorScheme.onSurface
+                            )
+                            Spacer(modifier = Modifier.width(6.dp))
+                            Surface(
+                                shape = RoundedCornerShape(4.dp),
+                                color = if (firebaseUser != null) {
+                                    if (isDark) Color(0xFF14532D).copy(alpha = 0.6f) else Color(0xFFDCFCE7)
+                                } else {
+                                    if (isDark) MaterialTheme.colorScheme.surfaceVariant else Color(0xFFF3F4F6)
+                                }
+                            ) {
+                                Text(
+                                    text = if (firebaseUser != null) "ONLINE" else "GUEST",
+                                    fontSize = 9.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    color = if (firebaseUser != null) {
+                                        if (isDark) Color(0xFF4ADE80) else Color(0xFF16A34A)
+                                    } else {
+                                        if (isDark) Color(0xFF9CA3AF) else Color(0xFF6B7280)
+                                    },
+                                    modifier = Modifier.padding(horizontal = 5.dp, vertical = 2.dp)
+                                )
+                            }
+                        }
+                        Text(
+                            text = if (firebaseUser != null) "${firebaseUser?.email ?: firebaseUser?.uid} • arkin-22b82" else "arkin-22b82 • Firestore Active",
+                            fontSize = 11.sp,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                }
+            }
+
+            Spacer(modifier = Modifier.height(18.dp))
 
             // Settings Menu Items Group
             Card(
@@ -194,8 +273,8 @@ fun ProfileScreen(viewModel: ArkinViewModel) {
                     SettingsRow(
                         title = "AI Document & Timetable Parser",
                         icon = Icons.Default.AutoAwesome,
-                        bgColor = Color(0xFFF3E8FF),
-                        iconColor = Color(0xFF9333EA),
+                        bgColor = if (isDark) MaterialTheme.colorScheme.surfaceVariant else Color(0xFFF3E8FF),
+                        iconColor = if (isDark) Color(0xFFC084FC) else Color(0xFF9333EA),
                         onClick = { viewModel.navigateTo(AppScreen.AI_DOC_ORGANIZER) }
                     )
 
@@ -246,23 +325,16 @@ fun ProfileScreen(viewModel: ArkinViewModel) {
                         )
                     }
 
-                    // Reset Demo Data
-                    SettingsRow(
-                        title = "Reload Sample Data",
-                        icon = Icons.Default.Refresh,
-                        bgColor = AccentOrangeBg,
-                        iconColor = AccentOrangeText,
-                        onClick = { viewModel.resetToDemoData() }
-                    )
+
 
                     // Logout
                     SettingsRow(
                         title = "Log Out",
-                        icon = Icons.Default.ExitToApp,
-                        bgColor = Color(0xFFFEE2E2),
-                        iconColor = Color(0xFFDC2626),
-                        titleColor = Color(0xFFDC2626),
-                        onClick = { viewModel.logout() }
+                        icon = Icons.AutoMirrored.Filled.ExitToApp,
+                        bgColor = if (isDark) Color(0xFF7F1D1D).copy(alpha = 0.35f) else Color(0xFFFEE2E2),
+                        iconColor = if (isDark) Color(0xFFF87171) else Color(0xFFDC2626),
+                        titleColor = if (isDark) Color(0xFFF87171) else Color(0xFFDC2626),
+                        onClick = { showLogoutConfirmDialog = true }
                     )
                 }
             }
@@ -270,7 +342,7 @@ fun ProfileScreen(viewModel: ArkinViewModel) {
             Spacer(modifier = Modifier.height(28.dp))
 
             Text(
-                text = "Arkin v1.0 • Built with Gemini AI & Room",
+                text = "Arkin v1.0 • Powered by Firebase (arkin-22b82) & Groq AI",
                 fontSize = 11.sp,
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )
@@ -283,11 +355,11 @@ fun ProfileScreen(viewModel: ArkinViewModel) {
         EditProfileDialog(
             currentName = name,
             currentMajor = major,
-            currentEmail = profile?.email ?: "rohan.sharma@campus.edu",
-            currentCollege = profile?.collegeName ?: "School of Engineering & Technology",
-            currentCourse = profile?.course ?: "B.Tech Computer Science & Engineering",
-            currentSemester = profile?.semester ?: "Semester 4",
-            currentAcademicYear = profile?.academicYear ?: "2025-2026",
+            currentEmail = profile?.email ?: "",
+            currentCollege = profile?.collegeName ?: "",
+            currentCourse = profile?.course ?: "",
+            currentSemester = profile?.semester ?: "",
+            currentAcademicYear = profile?.academicYear ?: "",
             onDismiss = { isEditProfileDialogOpen = false },
             onSave = { newName, newMajor, newEmail, newCollege, newCourse, newSem, newYear ->
                 viewModel.updateProfile(newName, newMajor, newEmail, newCollege, newCourse, newSem, newYear)
@@ -297,13 +369,26 @@ fun ProfileScreen(viewModel: ArkinViewModel) {
     }
 
     if (isChangePinDialogOpen) {
-        ChangePinDialog(
-            currentPin = profile?.lockerPin ?: "1234",
+        SecurePinChangeDialog(
             onDismiss = { isChangePinDialogOpen = false },
-            onSave = { newPin ->
+            onPinSuccessfullyChanged = { newPin ->
                 viewModel.changeLockerPin(newPin)
                 isChangePinDialogOpen = false
             }
+        )
+    }
+
+    if (showLogoutConfirmDialog) {
+        ConfirmationDialog(
+            title = "Log Out?",
+            message = "Are you sure you want to log out of your account? You will need to sign in again to sync your notes and data.",
+            confirmButtonText = "Log Out",
+            icon = Icons.AutoMirrored.Filled.ExitToApp,
+            onConfirm = {
+                showLogoutConfirmDialog = false
+                viewModel.logout()
+            },
+            onDismiss = { showLogoutConfirmDialog = false }
         )
     }
 }
@@ -501,82 +586,6 @@ private fun EditProfileDialog(
                         colors = ButtonDefaults.buttonColors(containerColor = ArkinPrimary)
                     ) {
                         Text("Save Changes", fontWeight = FontWeight.Bold)
-                    }
-                }
-            }
-        }
-    }
-}
-
-@Composable
-private fun ChangePinDialog(
-    currentPin: String,
-    onDismiss: () -> Unit,
-    onSave: (newPin: String) -> Unit
-) {
-    var newPin by remember { mutableStateOf("") }
-
-    Dialog(onDismissRequest = onDismiss) {
-        Surface(
-            shape = RoundedCornerShape(26.dp),
-            color = MaterialTheme.colorScheme.surface,
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(16.dp)
-        ) {
-            Column(modifier = Modifier.padding(22.dp)) {
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Text(
-                        text = "Change Locker PIN 🔒",
-                        style = MaterialTheme.typography.titleLarge,
-                        fontWeight = FontWeight.Bold
-                    )
-                    IconButton(onClick = onDismiss) {
-                        Icon(Icons.Default.Close, contentDescription = "Close")
-                    }
-                }
-
-                Spacer(modifier = Modifier.height(14.dp))
-
-                Text(
-                    text = "Current PIN: $currentPin. Enter a new 4-digit numeric passcode to secure your private notes.",
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    modifier = Modifier.padding(bottom = 14.dp)
-                )
-
-                OutlinedTextField(
-                    value = newPin,
-                    onValueChange = { if (it.length <= 4 && it.all { ch -> ch.isDigit() }) newPin = it },
-                    label = { Text("New 4-Digit PIN") },
-                    placeholder = { Text("e.g. 5678") },
-                    singleLine = true,
-                    shape = RoundedCornerShape(16.dp),
-                    colors = OutlinedTextFieldDefaults.colors(focusedBorderColor = ArkinPrimary),
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(bottom = 18.dp)
-                )
-
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.End
-                ) {
-                    Button(
-                        onClick = {
-                            if (newPin.length == 4) {
-                                onSave(newPin)
-                            }
-                        },
-                        enabled = newPin.length == 4,
-                        shape = RoundedCornerShape(16.dp),
-                        colors = ButtonDefaults.buttonColors(containerColor = ArkinPrimary)
-                    ) {
-                        Text("Update PIN", fontWeight = FontWeight.Bold)
                     }
                 }
             }

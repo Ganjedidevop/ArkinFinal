@@ -1,5 +1,10 @@
 package com.example.arkin.ui.screens
 
+import com.example.arkin.ui.anim.animateStaggeredEntrance
+import com.example.arkin.ui.anim.slideUpEntrance
+import com.example.arkin.ui.anim.slideInFromLeft
+import com.example.arkin.ui.anim.scaleEntrance
+import com.example.arkin.ui.anim.bouncyClickable
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -25,7 +30,6 @@ import androidx.compose.material.icons.filled.Assignment
 import androidx.compose.material.icons.filled.CalendarMonth
 import androidx.compose.material.icons.filled.FormatListBulleted
 import androidx.compose.material.icons.filled.Menu
-import androidx.compose.material.icons.filled.Mic
 import androidx.compose.material.icons.filled.Notifications
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.rounded.BarChart
@@ -33,6 +37,7 @@ import androidx.compose.material.icons.rounded.Book
 import androidx.compose.material.icons.rounded.CalendarToday
 import androidx.compose.material.icons.rounded.Checklist
 import androidx.compose.material.icons.rounded.Description
+import androidx.compose.material.icons.rounded.EditNote
 import androidx.compose.material.icons.rounded.Lock
 import androidx.compose.material.icons.rounded.NotificationsActive
 import androidx.compose.material.icons.rounded.Psychology
@@ -79,6 +84,11 @@ import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
 
+import androidx.compose.foundation.isSystemInDarkTheme
+import androidx.compose.material.icons.automirrored.filled.Assignment
+import com.example.ui.theme.ArkinBackgroundDark
+import com.example.ui.theme.ArkinPrimaryLight
+
 @Composable
 fun DashboardScreen(viewModel: ArkinViewModel) {
     val profile by viewModel.studentProfile.collectAsState()
@@ -86,14 +96,17 @@ fun DashboardScreen(viewModel: ArkinViewModel) {
     val notes by viewModel.filteredPublicNotes.collectAsState()
     val homework by viewModel.allHomework.collectAsState()
     val timetable by viewModel.classesForDay.collectAsState()
+    val reminders by viewModel.allReminders.collectAsState()
 
     val completedTasksCount = tasks.count { it.isCompleted }
     val totalTasksCount = tasks.size
     val pendingTasksCount = tasks.count { !it.isCompleted }
+    val uncompletedRemindersCount = reminders.count { !it.isCompleted }
 
     val currentDateText = "Today, " + SimpleDateFormat("MMM d", Locale.getDefault()).format(Date())
-    val studentFirstName = profile?.name?.split(" ")?.firstOrNull() ?: "Student"
+    val studentFirstName = profile?.name?.trim()?.split(" ")?.firstOrNull()?.ifBlank { "Student" } ?: "Student"
 
+    val isDark = isSystemInDarkTheme() || MaterialTheme.colorScheme.background == ArkinBackgroundDark
     val scrollState = rememberScrollState()
 
     Column(
@@ -149,14 +162,16 @@ fun DashboardScreen(viewModel: ArkinViewModel) {
                             tint = MaterialTheme.colorScheme.onSurface
                         )
                     }
-                    Box(
-                        modifier = Modifier
-                            .padding(top = 8.dp, end = 8.dp)
-                            .size(9.dp)
-                            .clip(CircleShape)
-                            .background(Color(0xFFEF4444))
-                            .border(1.5.dp, MaterialTheme.colorScheme.background, CircleShape)
-                    )
+                    if (uncompletedRemindersCount > 0) {
+                        Box(
+                            modifier = Modifier
+                                .padding(top = 8.dp, end = 8.dp)
+                                .size(9.dp)
+                                .clip(CircleShape)
+                                .background(Color(0xFFEF4444))
+                                .border(1.5.dp, MaterialTheme.colorScheme.background, CircleShape)
+                        )
+                    }
                 }
 
                 // Student Avatar
@@ -200,16 +215,21 @@ fun DashboardScreen(viewModel: ArkinViewModel) {
         HeroBanner(
             completedTasks = completedTasksCount,
             totalTasks = totalTasksCount,
-            currentDateText = currentDateText
+            currentDateText = currentDateText,
+            modifier = Modifier.scaleEntrance(delayMs = 80)
         )
 
         Spacer(modifier = Modifier.height(16.dp))
 
         // AI File & Timetable Upload Card
+        val aiCardBg = if (isDark) MaterialTheme.colorScheme.surfaceVariant else Color(0xFFF3E8FF)
+        val aiIconBg = if (isDark) MaterialTheme.colorScheme.surface else Color.White
+        val aiIconTint = if (isDark) ArkinPrimaryLight else Color(0xFF9333EA)
+
         Surface(
             onClick = { viewModel.navigateTo(AppScreen.AI_DOC_ORGANIZER) },
             shape = RoundedCornerShape(22.dp),
-            color = Color(0xFFF3E8FF),
+            color = aiCardBg,
             shadowElevation = 2.dp,
             modifier = Modifier
                 .fillMaxWidth()
@@ -221,14 +241,14 @@ fun DashboardScreen(viewModel: ArkinViewModel) {
             ) {
                 Surface(
                     shape = CircleShape,
-                    color = Color.White,
+                    color = aiIconBg,
                     modifier = Modifier.size(44.dp)
                 ) {
                     Box(contentAlignment = Alignment.Center) {
                         Icon(
-                            imageVector = Icons.Default.Assignment,
+                            imageVector = Icons.AutoMirrored.Filled.Assignment,
                             contentDescription = "Upload Document",
-                            tint = Color(0xFF9333EA),
+                            tint = aiIconTint,
                             modifier = Modifier.size(24.dp)
                         )
                     }
@@ -297,35 +317,19 @@ fun DashboardScreen(viewModel: ArkinViewModel) {
                 horizontalArrangement = Arrangement.SpaceBetween
             ) {
                 QuickAccessButton(
-                    title = "Notes",
-                    subtitle = "All your notes",
-                    icon = Icons.Rounded.Description,
-                    bgColor = AccentPurpleBg,
-                    iconColor = AccentPurpleText,
+                    title = "Notes", subtitle = "All your notes", icon = Icons.Rounded.Description, bgColor = AccentPurpleBg, iconColor = AccentPurpleText, modifier = Modifier.weight(1f).animateStaggeredEntrance(index = 0),
                     onClick = { viewModel.navigateTo(AppScreen.NOTES) }
                 )
                 QuickAccessButton(
-                    title = "To-Do",
-                    subtitle = "Your tasks",
-                    icon = Icons.Rounded.Checklist,
-                    bgColor = AccentTealBg,
-                    iconColor = AccentTealText,
+                    title = "To-Do", subtitle = "Your tasks", icon = Icons.Rounded.Checklist, bgColor = AccentTealBg, iconColor = AccentTealText, modifier = Modifier.weight(1f).animateStaggeredEntrance(index = 1),
                     onClick = { viewModel.navigateTo(AppScreen.TODO) }
                 )
                 QuickAccessButton(
-                    title = "Homework",
-                    subtitle = "Assignments",
-                    icon = Icons.Rounded.Book,
-                    bgColor = AccentOrangeBg,
-                    iconColor = AccentOrangeText,
+                    title = "Homework", subtitle = "Assignments", icon = Icons.Rounded.Book, bgColor = AccentOrangeBg, iconColor = AccentOrangeText, modifier = Modifier.weight(1f).animateStaggeredEntrance(index = 2),
                     onClick = { viewModel.navigateTo(AppScreen.HOMEWORK) }
                 )
                 QuickAccessButton(
-                    title = "Timetable",
-                    subtitle = "Class schedule",
-                    icon = Icons.Rounded.CalendarToday,
-                    bgColor = AccentBlueBg,
-                    iconColor = AccentBlueText,
+                    title = "Timetable", subtitle = "Class schedule", icon = Icons.Rounded.CalendarToday, bgColor = AccentBlueBg, iconColor = AccentBlueText, modifier = Modifier.weight(1f).animateStaggeredEntrance(index = 3),
                     onClick = { viewModel.navigateTo(AppScreen.TIMETABLE) }
                 )
             }
@@ -335,36 +339,20 @@ fun DashboardScreen(viewModel: ArkinViewModel) {
                 horizontalArrangement = Arrangement.SpaceBetween
             ) {
                 QuickAccessButton(
-                    title = "AI Assistant",
-                    subtitle = "Ask anything",
-                    icon = Icons.Rounded.Psychology,
-                    bgColor = AccentPinkBg,
-                    iconColor = AccentPinkText,
-                    hasBadge = true,
+                    title = "AI Assistant", subtitle = "Ask anything", icon = Icons.Rounded.Psychology, bgColor = AccentPinkBg, iconColor = AccentPinkText, modifier = Modifier.weight(1f).animateStaggeredEntrance(index = 4),
+                    hasBadge = false,
                     onClick = { viewModel.navigateTo(AppScreen.AI_ASSISTANT) }
                 )
                 QuickAccessButton(
-                    title = "Locker",
-                    subtitle = "Secure vault",
-                    icon = Icons.Rounded.Lock,
-                    bgColor = AccentLockerBg,
-                    iconColor = AccentLockerText,
+                    title = "Locker", subtitle = "Secure vault", icon = Icons.Rounded.Lock, bgColor = AccentLockerBg, iconColor = AccentLockerText, modifier = Modifier.weight(1f).animateStaggeredEntrance(index = 5),
                     onClick = { viewModel.navigateTo(AppScreen.LOCKER) }
                 )
                 QuickAccessButton(
-                    title = "Reminders",
-                    subtitle = "Stay updated",
-                    icon = Icons.Rounded.NotificationsActive,
-                    bgColor = AccentYellowBg,
-                    iconColor = AccentYellowText,
+                    title = "Reminders", subtitle = "Stay updated", icon = Icons.Rounded.NotificationsActive, bgColor = AccentYellowBg, iconColor = AccentYellowText, modifier = Modifier.weight(1f).animateStaggeredEntrance(index = 6),
                     onClick = { viewModel.navigateTo(AppScreen.REMINDERS) }
                 )
                 QuickAccessButton(
-                    title = "Voice Text",
-                    subtitle = "Dictate note",
-                    icon = Icons.Default.Mic,
-                    bgColor = AccentPurpleBg,
-                    iconColor = AccentPurpleText,
+                    title = "Quick Note", subtitle = "Capture ideas", icon = Icons.Rounded.EditNote, bgColor = AccentPurpleBg, iconColor = AccentPurpleText, modifier = Modifier.weight(1f).animateStaggeredEntrance(index = 7),
                     onClick = { viewModel.openAddNoteDialog(isSecure = false) }
                 )
             }
@@ -385,9 +373,7 @@ fun DashboardScreen(viewModel: ArkinViewModel) {
             horizontalArrangement = Arrangement.spacedBy(14.dp),
             contentPadding = PaddingValues(horizontal = 2.dp)
         ) {
-            item {
-                StatCard(
-                    count = notes.size,
+            item { StatCard(count = notes.size, modifier = Modifier.animateStaggeredEntrance(index = 8),
                     title = "Notes",
                     subtitle = "Total notes",
                     icon = Icons.Rounded.Description,
@@ -396,9 +382,7 @@ fun DashboardScreen(viewModel: ArkinViewModel) {
                     onClick = { viewModel.navigateTo(AppScreen.NOTES) }
                 )
             }
-            item {
-                StatCard(
-                    count = pendingTasksCount,
+            item { StatCard(count = pendingTasksCount, modifier = Modifier.animateStaggeredEntrance(index = 9),
                     title = "Tasks",
                     subtitle = "Pending tasks",
                     icon = Icons.Rounded.Checklist,

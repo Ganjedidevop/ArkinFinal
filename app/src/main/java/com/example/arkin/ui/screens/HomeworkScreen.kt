@@ -1,5 +1,8 @@
 package com.example.arkin.ui.screens
 
+import com.example.arkin.ui.anim.animateStaggeredEntrance
+import com.example.arkin.ui.anim.bouncyClickable
+import androidx.compose.foundation.lazy.itemsIndexed
 import android.net.Uri
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
@@ -24,8 +27,8 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.InsertDriveFile
 import androidx.compose.material.icons.filled.Add
-import androidx.compose.material.icons.filled.AutoAwesome
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.CloudUpload
@@ -50,9 +53,11 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextDecoration
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
@@ -61,25 +66,26 @@ import com.example.arkin.model.AppScreen
 import com.example.arkin.model.DocUploadType
 import com.example.arkin.ui.components.AppHeader
 import com.example.arkin.ui.components.getCategoryColor
+import com.example.arkin.util.DocumentTextExtractor
+import com.example.arkin.util.FileViewerHelper
 import com.example.arkin.viewmodel.ArkinViewModel
-import com.example.ui.theme.AccentOrangeBg
-import com.example.ui.theme.AccentOrangeText
 import com.example.ui.theme.ArkinPrimary
 
 @Composable
 fun HomeworkScreen(viewModel: ArkinViewModel) {
+    val context = LocalContext.current
     val homeworkList by viewModel.allHomework.collectAsState()
     var isManualAddDialogOpen by remember { mutableStateOf(false) }
+    var initialAttachmentUri by remember { mutableStateOf<Uri?>(null) }
 
-    // File Picker for Upload Assignment Button
+    // File Picker for Upload Assignment Button - Attaches file to homework item directly without switching screens
     val assignmentFilePicker = rememberLauncherForActivityResult(
-        contract = ActivityResultContracts.GetContent()
+        contract = ActivityResultContracts.OpenDocument()
     ) { uri: Uri? ->
         if (uri != null) {
-            viewModel.setUploadDocType(DocUploadType.ASSIGNMENT)
-            viewModel.uploadedDocName.value = "Assignment_Sheet_${System.currentTimeMillis() % 10000}.pdf"
-            viewModel.navigateTo(AppScreen.AI_DOC_ORGANIZER)
-            viewModel.showToast("Assignment file selected. Reviewing extracted questions & deadline...")
+            val (savedPath, _) = FileViewerHelper.persistAttachment(context, uri)
+            initialAttachmentUri = Uri.fromFile(java.io.File(savedPath))
+            isManualAddDialogOpen = true
         }
     }
 
@@ -90,16 +96,49 @@ fun HomeworkScreen(viewModel: ArkinViewModel) {
             .testTag("homework_screen_root")
     ) {
         AppHeader(
-            title = "Homework & Assignments",
+            title = "Homework",
             onBackClick = { viewModel.goBack() },
             trailingAction = {
-                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    // Explicit AI Document Scanner Option
                     Surface(
-                        onClick = { isManualAddDialogOpen = true },
+                        onClick = {
+                            viewModel.setUploadDocType(DocUploadType.ASSIGNMENT)
+                            viewModel.navigateTo(AppScreen.AI_DOC_ORGANIZER)
+                        },
+                        shape = RoundedCornerShape(12.dp),
+                        color = Color(0xFFFFEDD5),
+                        modifier = Modifier
+                            .height(38.dp)
+                            .testTag("homework_ai_scan_button")
+                    ) {
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            modifier = Modifier.padding(horizontal = 12.dp)
+                        ) {
+                            Text(
+                                text = "🪄 AI Scan",
+                                fontSize = 12.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = Color(0xFFEA580C),
+                                maxLines = 1,
+                                softWrap = false
+                            )
+                        }
+                    }
+
+                    Surface(
+                        onClick = {
+                            initialAttachmentUri = null
+                            isManualAddDialogOpen = true
+                        },
                         shape = CircleShape,
                         color = Color(0xFFFFEDD5),
                         modifier = Modifier
-                            .size(40.dp)
+                            .size(38.dp)
                             .testTag("homework_manual_add_button")
                     ) {
                         Box(contentAlignment = Alignment.Center) {
@@ -107,7 +146,7 @@ fun HomeworkScreen(viewModel: ArkinViewModel) {
                                 imageVector = Icons.Default.Add,
                                 contentDescription = "Manual Add",
                                 tint = Color(0xFFEA580C),
-                                modifier = Modifier.size(22.dp)
+                                modifier = Modifier.size(20.dp)
                             )
                         }
                     }
@@ -115,7 +154,7 @@ fun HomeworkScreen(viewModel: ArkinViewModel) {
             }
         )
 
-        // Action Banner: Upload Assignment with AI OR Manual Entry
+        // Action Banner: Direct File Attachment OR Manual Entry (Never navigates unexpectedly)
         Surface(
             shape = RoundedCornerShape(22.dp),
             color = MaterialTheme.colorScheme.surface,
@@ -130,7 +169,11 @@ fun HomeworkScreen(viewModel: ArkinViewModel) {
                 horizontalArrangement = Arrangement.spacedBy(10.dp)
             ) {
                 Button(
-                    onClick = { assignmentFilePicker.launch("*/*") },
+                    onClick = {
+                        assignmentFilePicker.launch(
+                            arrayOf("application/pdf", "image/*", "*/*")
+                        )
+                    },
                     shape = RoundedCornerShape(14.dp),
                     colors = ButtonDefaults.buttonColors(containerColor = ArkinPrimary),
                     modifier = Modifier
@@ -140,11 +183,14 @@ fun HomeworkScreen(viewModel: ArkinViewModel) {
                 ) {
                     Icon(Icons.Default.CloudUpload, contentDescription = null, modifier = Modifier.size(16.dp))
                     Spacer(modifier = Modifier.width(6.dp))
-                    Text("Upload File 📄", fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                    Text("Attach File 📄", fontSize = 12.sp, fontWeight = FontWeight.Bold)
                 }
 
                 OutlinedButton(
-                    onClick = { isManualAddDialogOpen = true },
+                    onClick = {
+                        initialAttachmentUri = null
+                        isManualAddDialogOpen = true
+                    },
                     shape = RoundedCornerShape(14.dp),
                     modifier = Modifier
                         .weight(1f)
@@ -188,21 +234,28 @@ fun HomeworkScreen(viewModel: ArkinViewModel) {
                         color = MaterialTheme.colorScheme.onSurface
                     )
                     Text(
-                        text = "Upload a question sheet or create an assignment record manually.",
+                        text = "Attach an assignment file or create an assignment entry manually.",
                         style = MaterialTheme.typography.bodyMedium,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                         modifier = Modifier.padding(top = 4.dp, bottom = 16.dp)
                     )
                     Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                         Button(
-                            onClick = { assignmentFilePicker.launch("*/*") },
+                            onClick = {
+                                assignmentFilePicker.launch(
+                                    arrayOf("application/pdf", "image/*", "*/*")
+                                )
+                            },
                             shape = RoundedCornerShape(16.dp),
                             colors = ButtonDefaults.buttonColors(containerColor = ArkinPrimary)
                         ) {
-                            Text("Upload File")
+                            Text("Attach File")
                         }
                         OutlinedButton(
-                            onClick = { isManualAddDialogOpen = true },
+                            onClick = {
+                                initialAttachmentUri = null
+                                isManualAddDialogOpen = true
+                            },
                             shape = RoundedCornerShape(16.dp)
                         ) {
                             Text("Manual Entry")
@@ -220,7 +273,10 @@ fun HomeworkScreen(viewModel: ArkinViewModel) {
                     InteractiveHomeworkCard(
                         hw = hw,
                         onClick = { viewModel.openAssignmentDetail(hw) },
-                        onToggle = { viewModel.toggleHomework(hw) }
+                        onToggle = { viewModel.toggleHomework(hw) },
+                        onOpenAttachment = {
+                            FileViewerHelper.openDocument(context, hw.attachmentUri, hw.attachmentName)
+                        }
                     )
                 }
             }
@@ -229,8 +285,12 @@ fun HomeworkScreen(viewModel: ArkinViewModel) {
 
     if (isManualAddDialogOpen) {
         ManualAddAssignmentDialog(
-            onDismiss = { isManualAddDialogOpen = false },
-            onAdd = { subject, title, dueDate, dueTime, description, teacher, priority ->
+            initialUri = initialAttachmentUri,
+            onDismiss = {
+                isManualAddDialogOpen = false
+                initialAttachmentUri = null
+            },
+            onAdd = { subject, title, dueDate, dueTime, description, teacher, priority, attUri, attName, attSize ->
                 viewModel.addHomework(
                     subject = subject,
                     title = title,
@@ -238,9 +298,13 @@ fun HomeworkScreen(viewModel: ArkinViewModel) {
                     dueTime = dueTime,
                     description = description,
                     teacherName = teacher,
-                    priority = priority
+                    priority = priority,
+                    attachmentUri = attUri,
+                    attachmentName = attName,
+                    attachmentSize = attSize
                 )
                 isManualAddDialogOpen = false
+                initialAttachmentUri = null
             }
         )
     }
@@ -251,6 +315,7 @@ private fun InteractiveHomeworkCard(
     hw: HomeworkEntity,
     onClick: () -> Unit,
     onToggle: () -> Unit,
+    onOpenAttachment: () -> Unit,
     modifier: Modifier = Modifier
 ) {
     val (bgColor, textColor) = getCategoryColor(hw.colorKey)
@@ -312,6 +377,37 @@ private fun InteractiveHomeworkCard(
                     textDecoration = if (hw.isDone) TextDecoration.LineThrough else TextDecoration.None
                 )
 
+                // Attachment preview pill if document is attached
+                if (!hw.attachmentName.isNullOrBlank()) {
+                    Surface(
+                        onClick = onOpenAttachment,
+                        shape = RoundedCornerShape(8.dp),
+                        color = Color(0xFFF3E8FF),
+                        modifier = Modifier.padding(top = 6.dp)
+                    ) {
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            modifier = Modifier.padding(horizontal = 8.dp, vertical = 3.dp)
+                        ) {
+                            Icon(
+                                imageVector = Icons.AutoMirrored.Filled.InsertDriveFile,
+                                contentDescription = "Attachment",
+                                tint = ArkinPrimary,
+                                modifier = Modifier.size(12.dp)
+                            )
+                            Spacer(modifier = Modifier.width(4.dp))
+                            Text(
+                                text = hw.attachmentName,
+                                fontSize = 10.sp,
+                                fontWeight = FontWeight.SemiBold,
+                                color = ArkinPrimary,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis
+                            )
+                        }
+                    }
+                }
+
                 Row(
                     verticalAlignment = Alignment.CenterVertically,
                     modifier = Modifier.padding(top = 6.dp)
@@ -364,9 +460,22 @@ private fun InteractiveHomeworkCard(
 
 @Composable
 private fun ManualAddAssignmentDialog(
+    initialUri: Uri? = null,
     onDismiss: () -> Unit,
-    onAdd: (subject: String, title: String, dueDate: String, dueTime: String, description: String, teacher: String, priority: String) -> Unit
+    onAdd: (
+        subject: String,
+        title: String,
+        dueDate: String,
+        dueTime: String,
+        description: String,
+        teacher: String,
+        priority: String,
+        attachmentUri: String?,
+        attachmentName: String?,
+        attachmentSize: String?
+    ) -> Unit
 ) {
+    val context = LocalContext.current
     var title by remember { mutableStateOf("") }
     var subject by remember { mutableStateOf("") }
     var description by remember { mutableStateOf("") }
@@ -374,6 +483,36 @@ private fun ManualAddAssignmentDialog(
     var dueDate by remember { mutableStateOf("Tomorrow") }
     var dueTime by remember { mutableStateOf("11:59 PM") }
     var priority by remember { mutableStateOf("Medium") }
+
+    var attachedUri by remember { mutableStateOf(initialUri) }
+    var attachedFileName by remember {
+        mutableStateOf(
+            if (initialUri != null) DocumentTextExtractor.getFileMetadata(context, initialUri).first else null
+        )
+    }
+    var attachedFileSize by remember {
+        mutableStateOf(
+            if (initialUri != null) {
+                val size = DocumentTextExtractor.getFileMetadata(context, initialUri).second
+                DocumentTextExtractor.formatFileSize(size)
+            } else null
+        )
+    }
+
+    val filePickerLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.OpenDocument()
+    ) { uri: Uri? ->
+        if (uri != null) {
+            val (savedPath, name) = FileViewerHelper.persistAttachment(context, uri)
+            val file = java.io.File(savedPath)
+            attachedUri = Uri.fromFile(file)
+            attachedFileName = name
+            attachedFileSize = DocumentTextExtractor.formatFileSize(if (file.exists()) file.length() else 0L)
+            if (title.isBlank()) {
+                title = name.substringBeforeLast('.')
+            }
+        }
+    }
 
     val scrollState = rememberScrollState()
 
@@ -397,7 +536,7 @@ private fun ManualAddAssignmentDialog(
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     Text(
-                        text = "Create Assignment 📝",
+                        text = "New Assignment 📝",
                         style = MaterialTheme.typography.titleLarge,
                         fontWeight = FontWeight.Bold,
                         color = MaterialTheme.colorScheme.onSurface
@@ -408,6 +547,72 @@ private fun ManualAddAssignmentDialog(
                 }
 
                 Spacer(modifier = Modifier.height(14.dp))
+
+                // Attached Document Section
+                if (attachedFileName != null) {
+                    Surface(
+                        shape = RoundedCornerShape(14.dp),
+                        color = MaterialTheme.colorScheme.surfaceVariant,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(bottom = 14.dp)
+                    ) {
+                        Row(
+                            modifier = Modifier.padding(12.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Icon(
+                                imageVector = Icons.AutoMirrored.Filled.InsertDriveFile,
+                                contentDescription = "Attachment",
+                                tint = ArkinPrimary,
+                                modifier = Modifier.size(20.dp)
+                            )
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Column(modifier = Modifier.weight(1f)) {
+                                Text(
+                                    text = attachedFileName ?: "Attached File",
+                                    fontSize = 12.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    color = MaterialTheme.colorScheme.onSurface,
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis
+                                )
+                                Text(
+                                    text = attachedFileSize ?: "",
+                                    fontSize = 10.sp,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                            }
+                            IconButton(
+                                onClick = {
+                                    attachedUri = null
+                                    attachedFileName = null
+                                    attachedFileSize = null
+                                },
+                                modifier = Modifier.size(24.dp)
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Default.Close,
+                                    contentDescription = "Remove",
+                                    tint = Color(0xFFEF4444),
+                                    modifier = Modifier.size(16.dp)
+                                )
+                            }
+                        }
+                    }
+                } else {
+                    OutlinedButton(
+                        onClick = { filePickerLauncher.launch(arrayOf("application/pdf", "image/*", "*/*")) },
+                        shape = RoundedCornerShape(14.dp),
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(bottom = 14.dp)
+                    ) {
+                        Icon(Icons.Default.CloudUpload, contentDescription = null, modifier = Modifier.size(16.dp))
+                        Spacer(modifier = Modifier.width(6.dp))
+                        Text("Attach Assignment Document / PDF", fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
+                    }
+                }
 
                 OutlinedTextField(
                     value = subject,
@@ -495,7 +700,18 @@ private fun ManualAddAssignmentDialog(
                     Button(
                         onClick = {
                             if (subject.isNotBlank() && title.isNotBlank()) {
-                                onAdd(subject, title, dueDate, dueTime, description, teacher, priority)
+                                onAdd(
+                                    subject,
+                                    title,
+                                    dueDate,
+                                    dueTime,
+                                    description,
+                                    teacher,
+                                    priority,
+                                    attachedUri?.toString(),
+                                    attachedFileName,
+                                    attachedFileSize
+                                )
                             }
                         },
                         shape = RoundedCornerShape(16.dp),

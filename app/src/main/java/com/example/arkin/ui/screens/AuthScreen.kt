@@ -35,6 +35,7 @@ import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Checkbox
 import androidx.compose.material3.CheckboxDefaults
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -44,8 +45,11 @@ import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.ui.window.Dialog
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -55,6 +59,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
@@ -70,27 +75,33 @@ import com.example.ui.theme.ArkinPrimary
 
 @Composable
 fun AuthScreen(viewModel: ArkinViewModel) {
-    var isSignUp by remember { mutableStateOf(false) }
+    var isSignUp by remember { mutableStateOf(true) }
+
+    val isAuthLoading by viewModel.isAuthLoading.collectAsState()
+    val authError by viewModel.authError.collectAsState()
+    val needsProfileSetup by viewModel.needsProfileSetup.collectAsState()
+    val studentProfile by viewModel.studentProfile.collectAsState()
+    val context = LocalContext.current
 
     // Form States
-    var emailOrPhone by remember { mutableStateOf("rohan.sharma@campus.edu") }
-    var password by remember { mutableStateOf("password123") }
-    var confirmPassword by remember { mutableStateOf("password123") }
-    var fullName by remember { mutableStateOf("Rohan Sharma") }
-    var phoneNumber by remember { mutableStateOf("+1 555-019-2834") }
-    var collegeName by remember { mutableStateOf("National Institute of Technology") }
-    var course by remember { mutableStateOf("B.Tech Computer Science & Engineering") }
-    var semester by remember { mutableStateOf("Semester 4") }
-    var academicYear by remember { mutableStateOf("2025-2026") }
+    var emailOrPhone by remember { mutableStateOf("") }
+    var password by remember { mutableStateOf("") }
+    var confirmPassword by remember { mutableStateOf("") }
+    var fullName by remember { mutableStateOf("") }
+    var phoneNumber by remember { mutableStateOf("") }
+    var collegeName by remember { mutableStateOf("") }
+    var course by remember { mutableStateOf("") }
+    var semester by remember { mutableStateOf("") }
+    var academicYear by remember { mutableStateOf("") }
 
     var isPasswordVisible by remember { mutableStateOf(false) }
     var isConfirmPasswordVisible by remember { mutableStateOf(false) }
     var rememberMe by remember { mutableStateOf(true) }
-    var agreedTerms by remember { mutableStateOf(true) }
+    var agreedTerms by remember { mutableStateOf(false) }
 
     var errorMessage by remember { mutableStateOf<String?>(null) }
     var isForgotPasswordDialogOpen by remember { mutableStateOf(false) }
-    var resetEmailInput by remember { mutableStateOf("rohan.sharma@campus.edu") }
+    var resetEmailInput by remember { mutableStateOf("") }
 
     val scrollState = rememberScrollState()
 
@@ -194,97 +205,274 @@ fun AuthScreen(viewModel: ArkinViewModel) {
 
         Spacer(modifier = Modifier.height(18.dp))
 
-        // Screen Heading & Subheading
-        Text(
-            text = if (isSignUp) "Create Account" else "Welcome Back! 👋",
-            style = MaterialTheme.typography.headlineMedium,
-            fontWeight = FontWeight.ExtraBold,
-            color = MaterialTheme.colorScheme.onBackground
-        )
+        if (needsProfileSetup) {
+            LaunchedEffect(studentProfile) {
+                if (fullName.isBlank()) {
+                    fullName = studentProfile?.name ?: ""
+                }
+                if (emailOrPhone.isBlank()) {
+                    emailOrPhone = studentProfile?.email ?: ""
+                }
+            }
 
-        Text(
-            text = if (isSignUp) "Let's get you started" else "Login to continue your journey.",
-            style = MaterialTheme.typography.bodyMedium,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-            modifier = Modifier.padding(top = 4.dp, bottom = 14.dp)
-        )
+            Text(
+                text = "Complete Profile 🎓",
+                style = MaterialTheme.typography.headlineMedium,
+                fontWeight = FontWeight.ExtraBold,
+                color = MaterialTheme.colorScheme.onBackground
+            )
 
-        // Segmented Switcher for Login / Sign Up
-        Surface(
-            shape = RoundedCornerShape(16.dp),
-            color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f),
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(bottom = 18.dp)
-                .testTag("auth_tab_selector")
-        ) {
+            Text(
+                text = "Please enter your college and academic details to complete registration.",
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.padding(top = 4.dp, bottom = 14.dp)
+            )
+
+            // Error Banner
+            val displayedError = errorMessage ?: authError
+            if (displayedError != null) {
+                Surface(
+                    shape = RoundedCornerShape(12.dp),
+                    color = Color(0xFFFEE2E2),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(bottom = 14.dp)
+                ) {
+                    Row(
+                        modifier = Modifier.padding(12.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text(
+                            text = "⚠️ $displayedError",
+                            color = Color(0xFFDC2626),
+                            fontSize = 12.sp,
+                            fontWeight = FontWeight.SemiBold
+                        )
+                    }
+                }
+            }
+
+            OutlinedTextField(
+                value = fullName,
+                onValueChange = { fullName = it; errorMessage = null },
+                label = { Text("Full Name *") },
+                placeholder = { Text("e.g. Alex Morgan") },
+                leadingIcon = { Icon(Icons.Default.Person, contentDescription = null, tint = Color(0xFF8F90A6)) },
+                shape = RoundedCornerShape(18.dp),
+                colors = OutlinedTextFieldDefaults.colors(
+                    focusedBorderColor = ArkinPrimary,
+                    unfocusedBorderColor = MaterialTheme.colorScheme.outline
+                ),
+                singleLine = true,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(bottom = 10.dp)
+            )
+
+            OutlinedTextField(
+                value = collegeName,
+                onValueChange = { collegeName = it; errorMessage = null },
+                label = { Text("College / University *") },
+                placeholder = { Text("e.g. National Institute of Technology") },
+                leadingIcon = { Icon(Icons.Default.School, contentDescription = null, tint = Color(0xFF8F90A6)) },
+                shape = RoundedCornerShape(18.dp),
+                colors = OutlinedTextFieldDefaults.colors(
+                    focusedBorderColor = ArkinPrimary,
+                    unfocusedBorderColor = MaterialTheme.colorScheme.outline
+                ),
+                singleLine = true,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(bottom = 10.dp)
+            )
+
+            OutlinedTextField(
+                value = course,
+                onValueChange = { course = it; errorMessage = null },
+                label = { Text("Degree / Course *") },
+                placeholder = { Text("e.g. B.Tech Computer Science") },
+                leadingIcon = { Icon(Icons.Default.MenuBook, contentDescription = null, tint = Color(0xFF8F90A6)) },
+                shape = RoundedCornerShape(18.dp),
+                colors = OutlinedTextFieldDefaults.colors(
+                    focusedBorderColor = ArkinPrimary,
+                    unfocusedBorderColor = MaterialTheme.colorScheme.outline
+                ),
+                singleLine = true,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(bottom = 10.dp)
+            )
+
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(4.dp)
+                    .padding(bottom = 18.dp),
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
             ) {
-                Surface(
-                    shape = RoundedCornerShape(12.dp),
-                    color = if (!isSignUp) ArkinPrimary else Color.Transparent,
-                    shadowElevation = if (!isSignUp) 2.dp else 0.dp,
-                    modifier = Modifier
-                        .weight(1f)
-                        .clickable { isSignUp = false; errorMessage = null }
-                        .testTag("auth_switch_to_login")
-                ) {
-                    Text(
-                        text = "Log In",
-                        color = if (!isSignUp) Color.White else MaterialTheme.colorScheme.onSurfaceVariant,
-                        fontWeight = if (!isSignUp) FontWeight.Bold else FontWeight.Medium,
-                        fontSize = 14.sp,
-                        textAlign = TextAlign.Center,
-                        modifier = Modifier.padding(vertical = 10.dp)
-                    )
-                }
+                OutlinedTextField(
+                    value = semester,
+                    onValueChange = { semester = it; errorMessage = null },
+                    label = { Text("Semester *") },
+                    placeholder = { Text("Semester 4") },
+                    shape = RoundedCornerShape(18.dp),
+                    colors = OutlinedTextFieldDefaults.colors(
+                        focusedBorderColor = ArkinPrimary,
+                        unfocusedBorderColor = MaterialTheme.colorScheme.outline
+                    ),
+                    singleLine = true,
+                    modifier = Modifier.weight(1f)
+                )
 
-                Surface(
-                    shape = RoundedCornerShape(12.dp),
-                    color = if (isSignUp) ArkinPrimary else Color.Transparent,
-                    shadowElevation = if (isSignUp) 2.dp else 0.dp,
-                    modifier = Modifier
-                        .weight(1f)
-                        .clickable { isSignUp = true; errorMessage = null }
-                        .testTag("auth_switch_to_signup")
-                ) {
-                    Text(
-                        text = "Sign Up",
-                        color = if (isSignUp) Color.White else MaterialTheme.colorScheme.onSurfaceVariant,
-                        fontWeight = if (isSignUp) FontWeight.Bold else FontWeight.Medium,
-                        fontSize = 14.sp,
-                        textAlign = TextAlign.Center,
-                        modifier = Modifier.padding(vertical = 10.dp)
-                    )
-                }
+                OutlinedTextField(
+                    value = academicYear,
+                    onValueChange = { academicYear = it; errorMessage = null },
+                    label = { Text("Year") },
+                    placeholder = { Text("2025-2026") },
+                    shape = RoundedCornerShape(18.dp),
+                    colors = OutlinedTextFieldDefaults.colors(
+                        focusedBorderColor = ArkinPrimary,
+                        unfocusedBorderColor = MaterialTheme.colorScheme.outline
+                    ),
+                    singleLine = true,
+                    modifier = Modifier.weight(1f)
+                )
             }
-        }
 
-        // Error Banner
-        if (errorMessage != null) {
-            Surface(
-                shape = RoundedCornerShape(12.dp),
-                color = Color(0xFFFEE2E2),
+            Button(
+                onClick = {
+                    when {
+                        fullName.isBlank() -> errorMessage = "Please enter your full name."
+                        collegeName.isBlank() -> errorMessage = "Please enter your college or university."
+                        course.isBlank() -> errorMessage = "Please enter your degree or course."
+                        semester.isBlank() -> errorMessage = "Please enter your semester."
+                        else -> {
+                            errorMessage = null
+                            viewModel.completeGoogleProfileSetup(
+                                fullName = fullName,
+                                college = collegeName,
+                                course = course,
+                                semester = semester,
+                                academicYear = academicYear
+                            )
+                        }
+                    }
+                },
+                enabled = !isAuthLoading,
+                shape = RoundedCornerShape(22.dp),
+                colors = ButtonDefaults.buttonColors(containerColor = ArkinPrimary),
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(bottom = 14.dp)
+                    .height(54.dp)
             ) {
-                Row(
-                    modifier = Modifier.padding(12.dp),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Text(
-                        text = "⚠️ ${errorMessage!!}",
-                        color = Color(0xFFDC2626),
-                        fontSize = 12.sp,
-                        fontWeight = FontWeight.SemiBold
+                if (isAuthLoading) {
+                    CircularProgressIndicator(
+                        color = Color.White,
+                        strokeWidth = 2.dp,
+                        modifier = Modifier.size(22.dp)
                     )
+                } else {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.Center
+                    ) {
+                        Text("Complete Registration & Continue 🚀", fontSize = 16.sp, fontWeight = FontWeight.Bold, color = Color.White)
+                    }
                 }
             }
-        }
+        } else {
+            // Screen Heading & Subheading
+            Text(
+                text = if (isSignUp) "Create Account" else "Welcome Back! 👋",
+                style = MaterialTheme.typography.headlineMedium,
+                fontWeight = FontWeight.ExtraBold,
+                color = MaterialTheme.colorScheme.onBackground
+            )
+
+            Text(
+                text = if (isSignUp) "Let's get you started" else "Login to continue your journey.",
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.padding(top = 4.dp, bottom = 14.dp)
+            )
+
+            // Segmented Switcher for Login / Sign Up
+            Surface(
+                shape = RoundedCornerShape(16.dp),
+                color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(bottom = 18.dp)
+                    .testTag("auth_tab_selector")
+            ) {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(4.dp)
+                ) {
+                    Surface(
+                        shape = RoundedCornerShape(12.dp),
+                        color = if (!isSignUp) ArkinPrimary else Color.Transparent,
+                        shadowElevation = if (!isSignUp) 2.dp else 0.dp,
+                        modifier = Modifier
+                            .weight(1f)
+                            .clickable { isSignUp = false; errorMessage = null }
+                            .testTag("auth_switch_to_login")
+                    ) {
+                        Text(
+                            text = "Log In",
+                            color = if (!isSignUp) Color.White else MaterialTheme.colorScheme.onSurfaceVariant,
+                            fontWeight = if (!isSignUp) FontWeight.Bold else FontWeight.Medium,
+                            fontSize = 14.sp,
+                            textAlign = TextAlign.Center,
+                            modifier = Modifier.padding(vertical = 10.dp)
+                        )
+                    }
+
+                    Surface(
+                        shape = RoundedCornerShape(12.dp),
+                        color = if (isSignUp) ArkinPrimary else Color.Transparent,
+                        shadowElevation = if (isSignUp) 2.dp else 0.dp,
+                        modifier = Modifier
+                            .weight(1f)
+                            .clickable { isSignUp = true; errorMessage = null }
+                            .testTag("auth_switch_to_signup")
+                    ) {
+                        Text(
+                            text = "Sign Up",
+                            color = if (isSignUp) Color.White else MaterialTheme.colorScheme.onSurfaceVariant,
+                            fontWeight = if (isSignUp) FontWeight.Bold else FontWeight.Medium,
+                            fontSize = 14.sp,
+                            textAlign = TextAlign.Center,
+                            modifier = Modifier.padding(vertical = 10.dp)
+                        )
+                    }
+                }
+            }
+
+            // Error Banner
+            val displayedError = errorMessage ?: authError
+            if (displayedError != null) {
+                Surface(
+                    shape = RoundedCornerShape(12.dp),
+                    color = Color(0xFFFEE2E2),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(bottom = 14.dp)
+                ) {
+                    Row(
+                        modifier = Modifier.padding(12.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text(
+                            text = "⚠️ $displayedError",
+                            color = Color(0xFFDC2626),
+                            fontSize = 12.sp,
+                            fontWeight = FontWeight.SemiBold
+                        )
+                    }
+                }
+            }
 
         if (isSignUp) {
             // ================== SIGN UP FORM ==================
@@ -292,7 +480,7 @@ fun AuthScreen(viewModel: ArkinViewModel) {
                 value = fullName,
                 onValueChange = { fullName = it; errorMessage = null },
                 label = { Text("Full Name") },
-                placeholder = { Text("e.g. Rohan Sharma") },
+                placeholder = { Text("e.g. Alex Morgan") },
                 leadingIcon = { Icon(Icons.Default.Person, contentDescription = null, tint = Color(0xFF8F90A6)) },
                 shape = RoundedCornerShape(18.dp),
                 colors = OutlinedTextFieldDefaults.colors(
@@ -310,7 +498,7 @@ fun AuthScreen(viewModel: ArkinViewModel) {
                 value = emailOrPhone,
                 onValueChange = { emailOrPhone = it; errorMessage = null },
                 label = { Text("Student Email") },
-                placeholder = { Text("rohan.sharma@campus.edu") },
+                placeholder = { Text("student@university.edu") },
                 leadingIcon = { Icon(Icons.Default.Email, contentDescription = null, tint = Color(0xFF8F90A6)) },
                 shape = RoundedCornerShape(18.dp),
                 colors = OutlinedTextFieldDefaults.colors(
@@ -479,25 +667,27 @@ fun AuthScreen(viewModel: ArkinViewModel) {
                     when {
                         fullName.isBlank() -> errorMessage = "Please enter your full name."
                         !emailOrPhone.contains("@") || !emailOrPhone.contains(".") -> errorMessage = "Please enter a valid email address."
+                        collegeName.isBlank() -> errorMessage = "Please enter your college or university."
+                        course.isBlank() -> errorMessage = "Please enter your degree or course."
+                        semester.isBlank() -> errorMessage = "Please enter your semester."
                         password.length < 6 -> errorMessage = "Password must be at least 6 characters long."
                         password != confirmPassword -> errorMessage = "Passwords do not match."
                         !agreedTerms -> errorMessage = "Please accept the Terms & Privacy Code."
                         else -> {
                             errorMessage = null
-                            viewModel.updateProfile(
-                                name = fullName,
-                                major = "$course, $semester",
+                            viewModel.signUpWithEmail(
+                                fullName = fullName,
                                 email = emailOrPhone,
+                                password = password,
                                 college = collegeName,
                                 course = course,
                                 semester = semester,
                                 academicYear = academicYear
                             )
-                            viewModel.showToast("Welcome to Arkin, $fullName! 🎉")
-                            viewModel.navigateTo(AppScreen.DASHBOARD)
                         }
                     }
                 },
+                enabled = !isAuthLoading,
                 shape = RoundedCornerShape(22.dp),
                 colors = ButtonDefaults.buttonColors(containerColor = ArkinPrimary),
                 modifier = Modifier
@@ -505,13 +695,73 @@ fun AuthScreen(viewModel: ArkinViewModel) {
                     .height(54.dp)
                     .testTag("signup_submit_button")
             ) {
-                Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.Center
-                ) {
-                    Text("Create Student Account", fontSize = 16.sp, fontWeight = FontWeight.Bold, color = Color.White)
-                    Spacer(modifier = Modifier.width(8.dp))
-                    Icon(Icons.AutoMirrored.Filled.ArrowForward, contentDescription = null, tint = Color.White, modifier = Modifier.size(18.dp))
+                if (isAuthLoading) {
+                    CircularProgressIndicator(
+                        color = Color.White,
+                        strokeWidth = 2.dp,
+                        modifier = Modifier.size(22.dp)
+                    )
+                } else {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.Center
+                    ) {
+                        Text("Create Student Account", fontSize = 16.sp, fontWeight = FontWeight.Bold, color = Color.White)
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Icon(Icons.AutoMirrored.Filled.ArrowForward, contentDescription = null, tint = Color.White, modifier = Modifier.size(18.dp))
+                    }
+                }
+            }
+
+            Spacer(modifier = Modifier.height(16.dp))
+
+            // Or register with Divider
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(vertical = 4.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                HorizontalDivider(modifier = Modifier.weight(1f), color = MaterialTheme.colorScheme.outline)
+                Text(
+                    text = "  or register with  ",
+                    fontSize = 12.sp,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+                HorizontalDivider(modifier = Modifier.weight(1f), color = MaterialTheme.colorScheme.outline)
+            }
+
+            Spacer(modifier = Modifier.height(16.dp))
+
+            // Continue with Google on Sign Up
+            OutlinedButton(
+                onClick = {
+                    errorMessage = null
+                    viewModel.signInWithGoogle(context)
+                },
+                enabled = !isAuthLoading,
+                shape = RoundedCornerShape(20.dp),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(50.dp)
+                    .testTag("signup_google_button")
+            ) {
+                if (isAuthLoading) {
+                    CircularProgressIndicator(
+                        color = ArkinPrimary,
+                        strokeWidth = 2.dp,
+                        modifier = Modifier.size(20.dp)
+                    )
+                } else {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Text("🇬", fontSize = 16.sp)
+                        Spacer(modifier = Modifier.width(10.dp))
+                        Text(
+                            text = "Continue with Google",
+                            fontWeight = FontWeight.SemiBold,
+                            color = MaterialTheme.colorScheme.onSurface
+                        )
+                    }
                 }
             }
 
@@ -534,13 +784,27 @@ fun AuthScreen(viewModel: ArkinViewModel) {
                     modifier = Modifier.clickable { isSignUp = false; errorMessage = null }
                 )
             }
+
+            Spacer(modifier = Modifier.height(10.dp))
+
+            TextButton(
+                onClick = { viewModel.navigateTo(AppScreen.DASHBOARD) },
+                modifier = Modifier.align(Alignment.CenterHorizontally)
+            ) {
+                Text(
+                    text = "Skip for now (Continue Offline) →",
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    fontSize = 13.sp,
+                    fontWeight = FontWeight.Medium
+                )
+            }
         } else {
             // ================== LOGIN FORM ==================
             OutlinedTextField(
                 value = emailOrPhone,
                 onValueChange = { emailOrPhone = it; errorMessage = null },
                 label = { Text("Email or Student ID") },
-                placeholder = { Text("rohan.sharma@campus.edu") },
+                placeholder = { Text("student@university.edu") },
                 leadingIcon = { Icon(Icons.Default.Email, contentDescription = null, tint = Color(0xFF8F90A6)) },
                 shape = RoundedCornerShape(18.dp),
                 colors = OutlinedTextFieldDefaults.colors(
@@ -623,27 +887,10 @@ fun AuthScreen(viewModel: ArkinViewModel) {
                         errorMessage = "Please enter your password."
                     } else {
                         errorMessage = null
-                        val existing = viewModel.studentProfile.value
-                        val studentName = if (existing != null && existing.name.isNotBlank()) existing.name else "Rohan Sharma"
-                        val studentMajor = if (existing != null && existing.major.isNotBlank()) existing.major else "Computer Science & Engineering"
-                        val college = if (existing != null && existing.collegeName.isNotBlank()) existing.collegeName else "National Institute of Technology"
-                        val courseVal = if (existing != null && existing.course.isNotBlank()) existing.course else "B.Tech Computer Science"
-                        val semVal = if (existing != null && existing.semester.isNotBlank()) existing.semester else "Semester 4"
-                        val yearVal = if (existing != null && existing.academicYear.isNotBlank()) existing.academicYear else "2025-2026"
-
-                        viewModel.updateProfile(
-                            name = studentName,
-                            major = studentMajor,
-                            email = emailOrPhone.trim(),
-                            college = college,
-                            course = courseVal,
-                            semester = semVal,
-                            academicYear = yearVal
-                        )
-                        viewModel.showToast("Welcome back, $studentName! 👋")
-                        viewModel.navigateTo(AppScreen.DASHBOARD)
+                        viewModel.signInWithEmail(emailOrPhone.trim(), password)
                     }
                 },
+                enabled = !isAuthLoading,
                 shape = RoundedCornerShape(22.dp),
                 colors = ButtonDefaults.buttonColors(containerColor = ArkinPrimary),
                 modifier = Modifier
@@ -651,13 +898,21 @@ fun AuthScreen(viewModel: ArkinViewModel) {
                     .height(54.dp)
                     .testTag("login_submit_button")
             ) {
-                Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.Center
-                ) {
-                    Text("Login", fontSize = 16.sp, fontWeight = FontWeight.Bold, color = Color.White)
-                    Spacer(modifier = Modifier.width(8.dp))
-                    Icon(Icons.AutoMirrored.Filled.ArrowForward, contentDescription = null, tint = Color.White, modifier = Modifier.size(18.dp))
+                if (isAuthLoading) {
+                    CircularProgressIndicator(
+                        color = Color.White,
+                        strokeWidth = 2.dp,
+                        modifier = Modifier.size(22.dp)
+                    )
+                } else {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.Center
+                    ) {
+                        Text("Login", fontSize = 16.sp, fontWeight = FontWeight.Bold, color = Color.White)
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Icon(Icons.AutoMirrored.Filled.ArrowForward, contentDescription = null, tint = Color.White, modifier = Modifier.size(18.dp))
+                    }
                 }
             }
 
@@ -684,50 +939,36 @@ fun AuthScreen(viewModel: ArkinViewModel) {
             // Continue with Google
             OutlinedButton(
                 onClick = {
-                    viewModel.updateProfile("Rohan Sharma", "Computer Science, 2nd Year", "rohan.sharma@campus.edu")
-                    viewModel.navigateTo(AppScreen.DASHBOARD)
+                    errorMessage = null
+                    viewModel.signInWithGoogle(context)
                 },
+                enabled = !isAuthLoading,
                 shape = RoundedCornerShape(20.dp),
                 modifier = Modifier
                     .fillMaxWidth()
                     .height(50.dp)
                     .testTag("login_google_button")
             ) {
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Text("🇬", fontSize = 16.sp)
-                    Spacer(modifier = Modifier.width(10.dp))
-                    Text(
-                        text = "Continue with Google",
-                        fontWeight = FontWeight.SemiBold,
-                        color = MaterialTheme.colorScheme.onSurface
+                if (isAuthLoading) {
+                    CircularProgressIndicator(
+                        color = ArkinPrimary,
+                        strokeWidth = 2.dp,
+                        modifier = Modifier.size(20.dp)
                     )
+                } else {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Text("🇬", fontSize = 16.sp)
+                        Spacer(modifier = Modifier.width(10.dp))
+                        Text(
+                            text = "Continue with Google",
+                            fontWeight = FontWeight.SemiBold,
+                            color = MaterialTheme.colorScheme.onSurface
+                        )
+                    }
                 }
             }
 
-            Spacer(modifier = Modifier.height(10.dp))
 
-            // Continue with Facebook / Campus SSO
-            OutlinedButton(
-                onClick = {
-                    viewModel.updateProfile("Rohan Sharma", "Computer Science, 2nd Year", "rohan.sharma@campus.edu")
-                    viewModel.navigateTo(AppScreen.DASHBOARD)
-                },
-                shape = RoundedCornerShape(20.dp),
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .height(50.dp)
-                    .testTag("login_facebook_button")
-            ) {
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Text("📘", fontSize = 16.sp)
-                    Spacer(modifier = Modifier.width(10.dp))
-                    Text(
-                        text = "Continue with Facebook / Campus SSO",
-                        fontWeight = FontWeight.SemiBold,
-                        color = MaterialTheme.colorScheme.onSurface
-                    )
-                }
-            }
 
             Spacer(modifier = Modifier.height(22.dp))
 
@@ -748,6 +989,21 @@ fun AuthScreen(viewModel: ArkinViewModel) {
                     modifier = Modifier.clickable { isSignUp = true }
                 )
             }
+
+            Spacer(modifier = Modifier.height(10.dp))
+
+            TextButton(
+                onClick = { viewModel.navigateTo(AppScreen.DASHBOARD) },
+                modifier = Modifier.align(Alignment.CenterHorizontally)
+            ) {
+                Text(
+                    text = "Skip for now (Continue Offline) →",
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    fontSize = 13.sp,
+                    fontWeight = FontWeight.Medium
+                )
+            }
+        }
         }
 
         Spacer(modifier = Modifier.height(30.dp))
@@ -758,7 +1014,7 @@ fun AuthScreen(viewModel: ArkinViewModel) {
             initialEmail = resetEmailInput,
             onDismiss = { isForgotPasswordDialogOpen = false },
             onSendReset = { email ->
-                viewModel.showToast("Password reset link sent to $email! Please check your inbox.")
+                viewModel.sendPasswordReset(email)
                 isForgotPasswordDialogOpen = false
             }
         )

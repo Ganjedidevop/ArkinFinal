@@ -1,5 +1,8 @@
 package com.example.arkin.ui.screens
 
+import com.example.arkin.ui.anim.animateStaggeredEntrance
+import com.example.arkin.ui.anim.bouncyClickable
+import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -35,6 +38,9 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
@@ -42,7 +48,9 @@ import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.example.arkin.data.model.NoteEntity
 import com.example.arkin.ui.components.AppHeader
+import com.example.arkin.ui.components.ConfirmationDialog
 import com.example.arkin.ui.components.NoteCard
 import com.example.arkin.viewmodel.ArkinViewModel
 import com.example.ui.theme.ArkinPrimary
@@ -52,6 +60,7 @@ fun NotesScreen(viewModel: ArkinViewModel) {
     val notes by viewModel.filteredPublicNotes.collectAsState()
     val searchQuery by viewModel.noteSearchQuery.collectAsState()
     val selectedTag by viewModel.selectedNoteTag.collectAsState()
+    var noteToDelete by remember { mutableStateOf<NoteEntity?>(null) }
 
     val tags = listOf("All", "Study", "Personal", "Project", "Exam")
 
@@ -201,11 +210,27 @@ fun NotesScreen(viewModel: ArkinViewModel) {
                     NoteCard(
                         note = note,
                         onNoteClick = { viewModel.openEditNoteDialog(note) },
-                        onDeleteClick = { viewModel.deleteNote(note) },
-                        onAiSummarizeClick = { viewModel.summarizeNoteWithAi(note) }
+                        onDeleteClick = { noteToDelete = note },
+                        onAiSummarizeClick = { viewModel.summarizeNoteWithAi(note) },
+                        onAttachmentUpdated = { newPath ->
+                            viewModel.updateNoteAttachmentUri(note, newPath)
+                        }
                     )
                 }
             }
         }
+    }
+
+    noteToDelete?.let { note ->
+        ConfirmationDialog(
+            title = "Delete Note?",
+            message = "Are you sure you want to delete '${if (note.title.isNotBlank()) note.title else "Untitled Note"}'? This action cannot be undone.",
+            confirmButtonText = "Delete",
+            onConfirm = {
+                viewModel.deleteNote(note)
+                noteToDelete = null
+            },
+            onDismiss = { noteToDelete = null }
+        )
     }
 }

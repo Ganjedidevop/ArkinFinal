@@ -1,5 +1,8 @@
 package com.example.arkin.ui.screens
 
+import com.example.arkin.ui.anim.animateStaggeredEntrance
+import com.example.arkin.ui.anim.bouncyClickable
+import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -44,7 +47,9 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
+import com.example.arkin.data.model.TimetableEntity
 import com.example.arkin.ui.components.AppHeader
+import com.example.arkin.ui.components.ConfirmationDialog
 import com.example.arkin.ui.components.TimetableCard
 import com.example.arkin.viewmodel.ArkinViewModel
 import com.example.ui.theme.ArkinPrimary
@@ -54,6 +59,7 @@ fun TimetableScreen(viewModel: ArkinViewModel) {
     val selectedDay by viewModel.selectedDay.collectAsState()
     val classes by viewModel.classesForDay.collectAsState()
     var isAddDialogOpen by remember { mutableStateOf(false) }
+    var classToDelete by remember { mutableStateOf<TimetableEntity?>(null) }
 
     val days = listOf("Mon", "Tue", "Wed", "Thu", "Fri", "Sat")
 
@@ -83,7 +89,7 @@ fun TimetableScreen(viewModel: ArkinViewModel) {
                             verticalAlignment = Alignment.CenterVertically,
                             modifier = Modifier.padding(horizontal = 10.dp)
                         ) {
-                            Text("🪄 AI Upload", fontSize = 12.sp, fontWeight = FontWeight.Bold, color = Color(0xFF9333EA))
+                            Text("🪄 AI Upload", fontSize = 12.sp, fontWeight = FontWeight.Bold, color = Color(0xFF9333EA), maxLines = 1, softWrap = false)
                         }
                     }
 
@@ -135,16 +141,23 @@ fun TimetableScreen(viewModel: ArkinViewModel) {
                             fontWeight = FontWeight.Medium,
                             color = if (isSelected) Color.White.copy(alpha = 0.85f) else MaterialTheme.colorScheme.onSurfaceVariant
                         )
-                        Spacer(modifier = Modifier.height(2.dp))
+                        val dayNumber = remember(day) {
+                            val cal = java.util.Calendar.getInstance()
+                            cal.firstDayOfWeek = java.util.Calendar.MONDAY
+                            val targetDayOfWeek = when (day) {
+                                "Mon" -> java.util.Calendar.MONDAY
+                                "Tue" -> java.util.Calendar.TUESDAY
+                                "Wed" -> java.util.Calendar.WEDNESDAY
+                                "Thu" -> java.util.Calendar.THURSDAY
+                                "Fri" -> java.util.Calendar.FRIDAY
+                                "Sat" -> java.util.Calendar.SATURDAY
+                                else -> java.util.Calendar.SUNDAY
+                            }
+                            cal.set(java.util.Calendar.DAY_OF_WEEK, targetDayOfWeek)
+                            cal.get(java.util.Calendar.DAY_OF_MONTH).toString()
+                        }
                         Text(
-                            text = when (day) {
-                                "Mon" -> "27"
-                                "Tue" -> "28"
-                                "Wed" -> "29"
-                                "Thu" -> "30"
-                                "Fri" -> "31"
-                                else -> "1"
-                            },
+                            text = dayNumber,
                             fontSize = 16.sp,
                             fontWeight = FontWeight.Bold,
                             color = if (isSelected) Color.White else MaterialTheme.colorScheme.onSurface
@@ -210,7 +223,7 @@ fun TimetableScreen(viewModel: ArkinViewModel) {
                 items(classes, key = { it.id }) { item ->
                     TimetableCard(
                         timetable = item,
-                        onDelete = { viewModel.deleteClass(item) }
+                        onDelete = { classToDelete = item }
                     )
                 }
             }
@@ -225,6 +238,19 @@ fun TimetableScreen(viewModel: ArkinViewModel) {
                 viewModel.addClass(subject, timeSlot, room, colorKey)
                 isAddDialogOpen = false
             }
+        )
+    }
+
+    classToDelete?.let { entry ->
+        ConfirmationDialog(
+            title = "Delete Class?",
+            message = "Are you sure you want to delete '${entry.subject}' (${entry.timeSlot}) from your schedule?",
+            confirmButtonText = "Delete",
+            onConfirm = {
+                viewModel.deleteClass(entry)
+                classToDelete = null
+            },
+            onDismiss = { classToDelete = null }
         )
     }
 }

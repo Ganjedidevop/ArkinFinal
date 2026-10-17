@@ -47,6 +47,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.R
 import com.example.arkin.model.AppScreen
+import com.example.arkin.data.firebase.FirebaseAuthHelper
 import com.example.arkin.viewmodel.ArkinViewModel
 import com.example.ui.theme.ArkinPrimary
 import kotlinx.coroutines.delay
@@ -61,7 +62,11 @@ fun SplashScreen(viewModel: ArkinViewModel) {
             animationSpec = tween(durationMillis = 2200, easing = LinearEasing)
         )
         delay(300)
-        viewModel.navigateTo(AppScreen.AUTH)
+        if (FirebaseAuthHelper.isUserLoggedIn) {
+            viewModel.navigateTo(AppScreen.DASHBOARD)
+        } else {
+            viewModel.navigateTo(AppScreen.AUTH)
+        }
     }
 
     Box(
