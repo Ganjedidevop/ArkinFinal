@@ -1005,6 +1005,7 @@ fun AuthScreen(viewModel: ArkinViewModel) {
             }
         }
         }
+        }
 
         Spacer(modifier = Modifier.height(30.dp))
     }
