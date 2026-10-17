@@ -200,4 +200,7 @@ interface StudentProfileDao {
 
     @Update
     suspend fun updateProfile(profile: StudentProfileEntity)
+
+    @Query("DELETE FROM student_profile")
+    suspend fun clearProfile()
 }

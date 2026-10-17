@@ -398,10 +398,24 @@ object FirestoreManager {
     /**
      * Download all cloud documents from Firestore under `users/{uid}` into local Room database.
      */
-    suspend fun syncFirestoreToLocal(db: ArkinDatabase, merge: Boolean = true): Result<Int> = withContext(Dispatchers.IO) {
+    suspend fun syncFirestoreToLocal(
+        db: ArkinDatabase,
+        merge: Boolean = true,
+        replaceAll: Boolean = false
+    ): Result<Int> = withContext(Dispatchers.IO) {
         val uid = FirebaseAuthHelper.currentUserId ?: return@withContext Result.failure(IllegalStateException("Please log in to restore from Firebase"))
         try {
             var restoredCount = 0
+
+            if (replaceAll) {
+                db.noteDao().clearAllNotes()
+                db.taskDao().clearAllTasks()
+                db.homeworkDao().clearAllHomework()
+                db.timetableDao().clearAllClasses()
+                db.examResultDao().clearAllExamResults()
+                db.reminderDao().clearAllReminders()
+                db.vaultItemDao().clearAllVaultItems()
+            }
 
             // 1. Restore Profile
             val remoteProfile = fetchProfile(uid)
@@ -583,6 +597,26 @@ object FirestoreManager {
             }
 
             Result.success(restoredCount)
+        } catch (e: Exception) {
+            Result.failure(mapFirestoreException(e))
+        }
+    }
+
+    /**
+     * Purge all documents under `users/{uid}` in Firestore collections.
+     */
+    suspend fun clearUserCloudData(uidOverride: String? = null): Result<Unit> = withContext(Dispatchers.IO) {
+        val uid = uidOverride ?: FirebaseAuthHelper.currentUserId
+            ?: return@withContext Result.failure(IllegalStateException("No authenticated user"))
+        try {
+            val collections = listOf("notes", "tasks", "homework", "timetable", "exam_results", "reminders")
+            for (col in collections) {
+                val snapshot = userDoc(uid).collection(col).get().await()
+                for (doc in snapshot.documents) {
+                    doc.reference.delete().await()
+                }
+            }
+            Result.success(Unit)
         } catch (e: Exception) {
             Result.failure(mapFirestoreException(e))
         }

@@ -79,6 +79,7 @@ fun ProfileScreen(viewModel: ArkinViewModel) {
     val firebaseUser by viewModel.firebaseUser.collectAsState()
     var isEditProfileDialogOpen by remember { mutableStateOf(false) }
     var isChangePinDialogOpen by remember { mutableStateOf(false) }
+    var showResetConfirmDialog by remember { mutableStateOf(false) }
     var showLogoutConfirmDialog by remember { mutableStateOf(false) }
 
     val name = profile?.name?.ifBlank { "Student" } ?: "Student"
@@ -260,14 +261,6 @@ fun ProfileScreen(viewModel: ArkinViewModel) {
                         onClick = { isEditProfileDialogOpen = true }
                     )
 
-                    // Cloud Backup & Restore
-                    SettingsRow(
-                        title = "Cloud Backup & Restore",
-                        icon = Icons.Default.CloudUpload,
-                        bgColor = AccentPurpleBg,
-                        iconColor = AccentPurpleText,
-                        onClick = { viewModel.navigateTo(AppScreen.BACKUP_RESTORE) }
-                    )
 
                     // AI Document & Timetable Organizer
                     SettingsRow(
@@ -327,6 +320,16 @@ fun ProfileScreen(viewModel: ArkinViewModel) {
 
 
 
+                    // Reset Account Data (Start Fresh)
+                    SettingsRow(
+                        title = "Reset Account Data (Start Fresh)",
+                        icon = Icons.Default.DeleteSweep,
+                        bgColor = if (isDark) Color(0xFF7C2D12).copy(alpha = 0.35f) else Color(0xFFFFEDD5),
+                        iconColor = if (isDark) Color(0xFFFB923C) else Color(0xFFEA580C),
+                        titleColor = if (isDark) Color(0xFFFB923C) else Color(0xFFEA580C),
+                        onClick = { showResetConfirmDialog = true }
+                    )
+
                     // Logout
                     SettingsRow(
                         title = "Log Out",
@@ -375,6 +378,20 @@ fun ProfileScreen(viewModel: ArkinViewModel) {
                 viewModel.changeLockerPin(newPin)
                 isChangePinDialogOpen = false
             }
+        )
+    }
+
+    if (showResetConfirmDialog) {
+        ConfirmationDialog(
+            title = "Reset Account Data?",
+            message = "This will remove all merged notes, tasks, homework, and timetable entries from this account so you can start completely fresh. Are you sure?",
+            confirmButtonText = "Reset All Data",
+            icon = Icons.Default.DeleteSweep,
+            onConfirm = {
+                showResetConfirmDialog = false
+                viewModel.resetAccountData(clearCloud = true)
+            },
+            onDismiss = { showResetConfirmDialog = false }
         )
     }
 

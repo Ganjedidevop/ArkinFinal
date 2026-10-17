@@ -31,6 +31,7 @@ import com.example.arkin.model.ParsedTimetableClass
 import com.example.arkin.util.DocumentTextExtractor
 import com.example.arkin.util.ExtractionResult
 import com.google.firebase.auth.FirebaseUser
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
@@ -38,6 +39,7 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import org.json.JSONArray
 import org.json.JSONObject
 
@@ -214,6 +216,12 @@ class ArkinViewModel(application: Application) : AndroidViewModel(application) {
             if (FirebaseAuthHelper.isUserLoggedIn) {
                 val user = FirebaseAuthHelper.currentUser
                 if (user != null) {
+                    val userEmail = user.email
+                    if (prof != null && prof.email.isNotBlank() && userEmail != null &&
+                        !prof.email.equals(userEmail, ignoreCase = true)
+                    ) {
+                        clearLocalUserData()
+                    }
                     val remoteProfile = FirestoreManager.fetchProfile(user.uid)
                     if (remoteProfile != null) {
                         profileDao.updateProfile(remoteProfile)
@@ -1373,6 +1381,69 @@ class ArkinViewModel(application: Application) : AndroidViewModel(application) {
 
 
     // ==========================================
+    // Local Data Isolation & Reset
+    // ==========================================
+
+    suspend fun clearLocalUserData() {
+        withContext(Dispatchers.IO) {
+            db.noteDao().clearAllNotes()
+            db.taskDao().clearAllTasks()
+            db.homeworkDao().clearAllHomework()
+            db.timetableDao().clearAllClasses()
+            db.reminderDao().clearAllReminders()
+            db.examResultDao().clearAllExamResults()
+            db.vaultItemDao().clearAllVaultItems()
+            profileDao.clearProfile()
+            profileDao.insertProfile(StudentProfileEntity(id = 1))
+
+            val context = getApplication<Application>().applicationContext
+            VaultSecurityManager.clearVault(context)
+        }
+
+        _isVaultUnlocked.value = false
+        _enteredPin.value = ""
+        _isPinError.value = false
+        _chatMessages.value = listOf(
+            ChatMessage(
+                sender = "ai",
+                text = "Hello! 👋 I'm Arkin, your AI study assistant. I can explain complex academic concepts, solve assignment questions step-by-step, organize your timetable, or generate revision flashcards."
+            )
+        )
+        selectedAssignment.value = null
+        editingNote.value = null
+        isNoteDialogOpen.value = false
+        backupPreview.value = null
+        uploadedDocName.value = null
+        selectedDocUri.value = null
+        parsedClasses.value = emptyList()
+        parsedAssignments.value = emptyList()
+        parsedExamQuestions.value = emptyList()
+        authError.value = null
+        needsProfileSetup.value = false
+        lastFirestoreSyncTime.value = null
+    }
+
+    /**
+     * Purges all data associated with this account (both local and cloud) so user can start completely fresh.
+     */
+    fun resetAccountData(clearCloud: Boolean = true) {
+        viewModelScope.launch {
+            _isAiLoading.value = true
+            try {
+                if (clearCloud && FirebaseAuthHelper.isUserLoggedIn) {
+                    FirestoreManager.clearUserCloudData()
+                }
+                clearLocalUserData()
+                showToast("Account data reset! Your account is now fresh and clean. ✨")
+            } catch (e: Exception) {
+                showToast("Reset failed: ${e.message}")
+            } finally {
+                _isAiLoading.value = false
+            }
+        }
+    }
+
+    // ==========================================
     // Firebase Authentication Actions
     // ==========================================
 
@@ -1388,6 +1459,9 @@ class ArkinViewModel(application: Application) : AndroidViewModel(application) {
         isAuthLoading.value = true
         authError.value = null
         viewModelScope.launch {
+            // Clean any prior local data before creating a new account
+            clearLocalUserData()
+
             val result = FirebaseAuthHelper.signUpWithEmail(email, password, fullName)
             isAuthLoading.value = false
             if (result.isSuccess) {
@@ -1405,7 +1479,7 @@ class ArkinViewModel(application: Application) : AndroidViewModel(application) {
                 )
                 profileDao.updateProfile(newProfile)
                 FirestoreManager.saveProfile(newProfile, user.uid)
-                FirestoreManager.syncLocalToFirestore(db)
+                // Do NOT call syncLocalToFirestore(db) here! A new account starts fresh and isolated.
                 showToast("Account created successfully! Welcome to Arkin, ${newProfile.name} 🎉")
                 navigateTo(AppScreen.DASHBOARD)
             } else {
@@ -1424,19 +1498,25 @@ class ArkinViewModel(application: Application) : AndroidViewModel(application) {
             isAuthLoading.value = false
             if (result.isSuccess) {
                 val user = result.getOrNull()!!
+                // Clear any leftover local data before pulling this user's data
+                clearLocalUserData()
+
                 val remoteProfile = FirestoreManager.fetchProfile(user.uid)
                 if (remoteProfile != null) {
                     profileDao.updateProfile(remoteProfile)
                 } else {
-                    val current = studentProfile.value ?: StudentProfileEntity()
-                    val updated = current.copy(
-                        name = user.displayName ?: current.name,
-                        email = user.email ?: current.email
+                    val current = StudentProfileEntity(
+                        id = 1,
+                        name = user.displayName ?: "Student",
+                        email = user.email ?: email.trim(),
+                        lastBackupDate = System.currentTimeMillis()
                     )
-                    profileDao.updateProfile(updated)
-                    FirestoreManager.saveProfile(updated, user.uid)
+                    profileDao.updateProfile(current)
+                    FirestoreManager.saveProfile(current, user.uid)
                 }
-                FirestoreManager.syncFirestoreToLocal(db, merge = true)
+                // Replace all local data with ONLY this user's remote cloud data
+                FirestoreManager.syncFirestoreToLocal(db, replaceAll = true)
+                lastFirestoreSyncTime.value = System.currentTimeMillis()
                 showToast("Welcome back, ${user.displayName ?: user.email}! 👋")
                 navigateTo(AppScreen.DASHBOARD)
             } else {
@@ -1455,29 +1535,33 @@ class ArkinViewModel(application: Application) : AndroidViewModel(application) {
             isAuthLoading.value = false
             if (result.isSuccess) {
                 val user = result.getOrNull()!!
+                clearLocalUserData()
                 try {
                     val remoteProfile = FirestoreManager.fetchProfile(user.uid)
                     if (remoteProfile != null && remoteProfile.collegeName.isNotBlank() && remoteProfile.course.isNotBlank()) {
                         profileDao.updateProfile(remoteProfile)
-                        FirestoreManager.syncFirestoreToLocal(db, merge = true)
+                        FirestoreManager.syncFirestoreToLocal(db, replaceAll = true)
+                        lastFirestoreSyncTime.value = System.currentTimeMillis()
                         showToast("Welcome back, ${user.displayName ?: user.email}! 🎉")
                         navigateTo(AppScreen.DASHBOARD)
                     } else {
-                        val current = studentProfile.value ?: StudentProfileEntity()
-                        val updated = current.copy(
-                            name = user.displayName?.takeIf { it.isNotBlank() } ?: current.name,
-                            email = user.email?.takeIf { it.isNotBlank() } ?: current.email
+                        val newProfile = StudentProfileEntity(
+                            id = 1,
+                            name = user.displayName?.takeIf { it.isNotBlank() } ?: "Student",
+                            email = user.email ?: "",
+                            lastBackupDate = System.currentTimeMillis()
                         )
-                        profileDao.updateProfile(updated)
+                        profileDao.updateProfile(newProfile)
                         needsProfileSetup.value = true
                     }
                 } catch (e: Exception) {
-                    val current = studentProfile.value ?: StudentProfileEntity()
-                    val updated = current.copy(
-                        name = user.displayName?.takeIf { it.isNotBlank() } ?: current.name,
-                        email = user.email?.takeIf { it.isNotBlank() } ?: current.email
+                    val newProfile = StudentProfileEntity(
+                        id = 1,
+                        name = user.displayName?.takeIf { it.isNotBlank() } ?: "Student",
+                        email = user.email ?: "",
+                        lastBackupDate = System.currentTimeMillis()
                     )
-                    profileDao.updateProfile(updated)
+                    profileDao.updateProfile(newProfile)
                     needsProfileSetup.value = true
                 }
             } else {
@@ -1501,10 +1585,10 @@ class ArkinViewModel(application: Application) : AndroidViewModel(application) {
         isAuthLoading.value = true
         viewModelScope.launch {
             val user = FirebaseAuthHelper.currentUser
-            val current = studentProfile.value ?: StudentProfileEntity()
-            val updated = current.copy(
-                name = fullName.trim().ifBlank { current.name.ifBlank { "Student" } },
-                email = user?.email ?: current.email,
+            val updated = StudentProfileEntity(
+                id = 1,
+                name = fullName.trim().ifBlank { user?.displayName ?: "Student" },
+                email = user?.email ?: "",
                 major = if (course.isNotBlank() && semester.isNotBlank()) "$course, $semester" else course.ifBlank { semester },
                 collegeName = college.trim(),
                 course = course.trim(),
@@ -1569,7 +1653,7 @@ class ArkinViewModel(application: Application) : AndroidViewModel(application) {
         }
         isFirestoreSyncing.value = true
         viewModelScope.launch {
-            val result = FirestoreManager.syncFirestoreToLocal(db, merge = true)
+            val result = FirestoreManager.syncFirestoreToLocal(db, replaceAll = true)
             isFirestoreSyncing.value = false
             if (result.isSuccess) {
                 lastFirestoreSyncTime.value = System.currentTimeMillis()
@@ -1582,8 +1666,11 @@ class ArkinViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     fun logout() {
-        FirebaseAuthHelper.signOut()
-        navigateTo(AppScreen.AUTH, addToStack = false)
-        showToast("Signed out of Firebase")
+        viewModelScope.launch {
+            clearLocalUserData()
+            FirebaseAuthHelper.signOut()
+            navigateTo(AppScreen.AUTH, addToStack = false)
+            showToast("Signed out. Device data cleared.")
+        }
     }
 }

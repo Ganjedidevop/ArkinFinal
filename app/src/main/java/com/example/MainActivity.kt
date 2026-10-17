@@ -34,7 +34,7 @@ import com.example.arkin.ui.screens.AiAssistantScreen
 import com.example.arkin.ui.screens.AnalyticsScreen
 import com.example.arkin.ui.screens.AuthScreen
 import com.example.arkin.ui.screens.AssignmentDetailScreen
-import com.example.arkin.ui.screens.BackupRestoreScreen
+
 import com.example.arkin.ui.screens.DashboardScreen
 import com.example.arkin.ui.screens.HomeworkScreen
 import com.example.arkin.ui.screens.LockerScreen
@@ -172,7 +172,7 @@ fun MainAppContent(viewModel: ArkinViewModel) {
                     AppScreen.REMINDERS -> RemindersScreen(viewModel = viewModel)
                     AppScreen.ANALYTICS -> AnalyticsScreen(viewModel = viewModel)
                     AppScreen.PROFILE -> ProfileScreen(viewModel = viewModel)
-                    AppScreen.BACKUP_RESTORE -> BackupRestoreScreen(viewModel = viewModel)
+
                     AppScreen.ASSIGNMENT_DETAIL -> AssignmentDetailScreen(viewModel = viewModel)
                 }
             }

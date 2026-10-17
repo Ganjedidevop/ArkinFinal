@@ -14,7 +14,6 @@ enum class AppScreen {
     REMINDERS,
     ANALYTICS,
     PROFILE,
-    BACKUP_RESTORE,
     ASSIGNMENT_DETAIL
 }
 

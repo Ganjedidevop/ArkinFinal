@@ -320,6 +320,17 @@ object VaultSecurityManager {
         return if (success) Result.success(Unit) else Result.failure(Exception("Failed to save new PIN."))
     }
 
+    fun clearVault(context: Context) {
+        getPrefs(context).edit().clear().apply()
+        try {
+            val vaultDir = File(context.filesDir, "vault")
+            if (vaultDir.exists() && vaultDir.isDirectory) {
+                vaultDir.deleteRecursively()
+            }
+        } catch (_: Exception) {
+        }
+    }
+
     // ==========================================
     // Vault PIN Recovery via Question or Email
     // ==========================================
